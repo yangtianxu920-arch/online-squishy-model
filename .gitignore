@@ -1,0 +1,22 @@
+# 开发过程中的本地备份和临时文件
+index.backup-*.html
+对比-*.html
+sounds/unused/
+
+# 生成出来的东西（由 build-release.mjs / wxapp/build/build.mjs 生成）
+试玩版/
+*.zip
+wxapp/build/gen/
+wxapp/minigame/game.js
+wxapp/minigame/env.bin
+wxapp/minigame/sounds/
+
+# 依赖
+node_modules/
+
+# 只在本机有意义的文件
+wxapp/project.config.json
+wxapp/project.private.config.json
+wxapp/preview-qr.png
+cover-itch.png
+头像/

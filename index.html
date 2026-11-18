@@ -1,0 +1,3026 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#fbe3f1">
+<title>电子捏捏</title>
+<style>
+  :root { --ink:#5b4660; --pill:rgba(255,255,255,.62); --line:rgba(255,255,255,.9); --accent:#ff8fab; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+  html,body { margin:0; height:100%; overflow:hidden; }
+  body {
+    font-family:"PingFang SC","Microsoft YaHei","HarmonyOS Sans SC",system-ui,sans-serif; color:var(--ink);
+    background:radial-gradient(120% 90% at 50% 20%, #fff6fb 0%, #fbe3f1 38%, #e3dcff 100%);
+    user-select:none; -webkit-user-select:none;
+  }
+  canvas#stage { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; cursor:grab; }
+  .glass { background:var(--pill); border:1px solid var(--line); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+           box-shadow:0 8px 28px rgba(150,110,170,.16); }
+  header { position:fixed; left:112px; top:14px; pointer-events:none; }
+  header h1 { margin:0; font-size:24px; letter-spacing:2px; font-weight:800; }
+  header p { margin:4px 0 0; font-size:13px; opacity:.7; }
+  #topright { position:fixed; right:16px; top:16px; display:flex; gap:8px; align-items:center; }
+  button { font:inherit; color:inherit; cursor:pointer; border:none; }
+  .pillbtn { height:38px; padding:0 14px; border-radius:999px; font-size:13px; }
+  .pillbtn.off { opacity:.6; }
+  .icon { width:38px; height:38px; border-radius:50%; font-size:17px; }
+  #tools { position:fixed; left:16px; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:10px;
+           padding:8px; border-radius:26px; }
+  #tools button { width:58px; height:58px; border-radius:20px; background:transparent; font-size:12px; line-height:1.25; transition:.18s; }
+  #tools button i { display:block; font-style:normal; font-size:22px; }
+  #tools button.on, .seg button.on { background:#fff; box-shadow:0 4px 14px rgba(255,120,160,.28); color:#e0527a; }
+  #bottom { position:fixed; left:0; right:0; bottom:16px; display:flex; flex-direction:column; align-items:center; gap:10px; pointer-events:none; }
+  #bottom > * { pointer-events:auto; }
+  .seg { display:flex; gap:4px; padding:5px; border-radius:999px; }
+  .seg button { padding:8px 18px; border-radius:999px; background:transparent; font-size:13px; transition:.18s; }
+  /* 首页：选一只捏捏点进去 */
+  #home { position:fixed; inset:0; overflow-y:auto; padding:56px 20px 40px; display:flex; flex-direction:column; align-items:center; }
+  #home h1 { margin:0 0 34px; font-size:40px; letter-spacing:6px; font-weight:800; }
+  #home > p { margin:10px 0 26px; font-size:15px; opacity:.7; }
+  #home section { width:100%; max-width:1040px; margin-bottom:40px; }
+  #home h2 { margin:0 0 16px; font-size:20px; letter-spacing:2px; text-align:center; }
+  #home h2 small { font-size:12px; font-weight:400; letter-spacing:0; opacity:.6; margin-left:8px; }
+  .grid, .grid.big { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 193px)); gap:18px; justify-content:center; }
+  .card { display:flex; flex-direction:column; align-items:center; padding:10px 10px 14px; border-radius:24px; text-align:center;
+          transition:transform .18s, box-shadow .18s; }
+  button.card:hover { transform:translateY(-6px) scale(1.02); box-shadow:0 18px 40px rgba(255,120,160,.28); }
+  button.card:active { transform:scale(.97); }
+  .card .thumb { width:100%; aspect-ratio:1; border-radius:20px; background:rgba(255,255,255,.55) center/cover no-repeat;
+                 display:flex; align-items:center; justify-content:center; font-size:64px; }
+  .card b { margin-top:10px; font-size:15px; }
+  .card small { margin-top:3px; font-size:12px; opacity:.65; }
+  .card.soon { opacity:.5; }
+  #back { position:fixed; left:16px; top:16px; }
+  body:not(.playing) :is(header, #topright, #tools, #bottom, #back, canvas#stage) { display:none; }
+  body.playing #home { display:none; }
+  header h1 { pointer-events:auto; }
+  body.clean :is(header, #topright, #tools, #bottom, #back) { display:none; }
+  #cleanExit { position:fixed; left:0; top:0; width:84px; height:84px; display:none; background:transparent; z-index:20; }
+  body.clean.playing #cleanExit { display:block; }
+  #err { position:fixed; inset:0; display:none; align-items:center; justify-content:center; padding:30px; text-align:center; font-size:15px; }
+  /* 手机版：顶上一行是 返回 / 重置 / 声音，标题在第二行居中；工具栏横着放在底部，手感栏在它上面 */
+  @media (max-width:640px) {
+    #back { left:calc(10px + env(safe-area-inset-left)); top:calc(10px + env(safe-area-inset-top)); }
+    #topright { right:calc(10px + env(safe-area-inset-right)); top:calc(10px + env(safe-area-inset-top)); gap:6px; }
+    header { left:0; right:0; top:calc(58px + env(safe-area-inset-top)); text-align:center; }
+    header h1 { font-size:19px; } header p { display:none; }
+    #tools { top:auto; left:50%; bottom:calc(14px + env(safe-area-inset-bottom)); transform:translateX(-50%); flex-direction:row; gap:6px; padding:6px; border-radius:24px; }
+    #tools button { width:74px; height:60px; }
+    #bottom { bottom:calc(94px + env(safe-area-inset-bottom)); }
+    .seg button { padding:8px 14px; }
+    #home { padding:calc(34px + env(safe-area-inset-top)) 14px calc(30px + env(safe-area-inset-bottom)); }
+    #home h1 { font-size:30px; margin-bottom:22px; }
+    .grid, .grid.big { grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; }
+    .card { padding:10px 10px 14px; border-radius:22px; } .card b { font-size:15px; margin-top:8px; } .card small { font-size:11px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+
+<button id="back" class="pillbtn glass">‹ 全部捏捏</button>
+<button id="cleanExit" aria-label="显示按钮"></button>
+<header>
+  <h1 id="toyTitle">电子捏捏</h1>
+</header>
+
+<div id="topright">
+  <button id="reset" class="pillbtn glass" title="把这只捏捏恢复成全新的">↺ 重置</button>
+  <button id="sound" class="icon glass" title="声音">🔊</button>
+</div>
+
+<div id="tools" class="glass">
+  <button data-tool="poke" class="on"><i>👆</i>戳</button>
+  <button data-tool="pinch"><i>🤏</i>捏</button>
+  <button data-tool="palm"><i>✋</i>压</button>
+</div>
+
+<div id="bottom">
+  <div id="feel" class="seg glass">
+    <button data-feel="bouncy" class="on">Q弹硅胶</button>
+    <button data-feel="slow">奶油感</button>
+    <button data-feel="water">水感</button>
+  </div>
+</div>
+<div id="home">
+  <h1>电子捏捏</h1>
+  <section>
+    <h2>脆皮捏捏</h2>
+    <div class="grid big">
+      <button class="card glass" data-toy="crisp" data-name="脆皮捏捏"><span class="thumb"></span><b>脆皮捏捏</b></button>
+      <button class="card glass" data-toy="layer" data-name="多层脆皮捏捏"><span class="thumb"></span><b>多层脆皮捏捏</b></button>
+      <button class="card glass" data-toy="burger" data-name="汉堡捏捏"><span class="thumb"></span><b>汉堡捏捏</b></button>
+      <button class="card glass" data-toy="fries" data-name="薯条捏捏"><span class="thumb"></span><b>薯条捏捏</b></button>
+      <button class="card glass" data-toy="donut" data-name="甜甜圈捏捏"><span class="thumb"></span><b>甜甜圈捏捏</b></button>
+      <button class="card glass" data-toy="carrot" data-name="胡萝卜捏捏"><span class="thumb"></span><b>胡萝卜捏捏</b></button>
+      <button class="card glass" data-toy="hotdog" data-name="热狗捏捏"><span class="thumb"></span><b>热狗捏捏</b></button>
+      <button class="card glass" data-toy="bread" data-name="面包捏捏"><span class="thumb"></span><b>面包捏捏</b></button>
+      <button class="card glass" data-toy="ice" data-name="脆皮冰激凌"><span class="thumb"></span><b>脆皮冰激凌</b></button>
+      <button class="card glass" data-toy="egg" data-name="咸鸭蛋捏捏"><span class="thumb"></span><b>咸鸭蛋捏捏</b></button>
+      <button class="card glass" data-toy="mango" data-name="芒果爆浆捏捏"><span class="thumb"></span><b>芒果爆浆捏捏</b></button>
+      <button class="card glass" data-toy="choco" data-name="巧克力脆球捏捏"><span class="thumb"></span><b>巧克力脆球捏捏</b></button>
+      <button class="card glass" data-toy="melon" data-name="西瓜捏捏"><span class="thumb"></span><b>西瓜捏捏</b></button>
+      <button class="card glass" data-toy="berry" data-name="草莓捏捏"><span class="thumb"></span><b>草莓捏捏</b></button>
+      <button class="card glass" data-toy="apple" data-name="苹果片捏捏"><span class="thumb"></span><b>苹果片捏捏</b></button>
+      <button class="card glass" data-toy="citrus" data-name="橙子柠檬片捏捏"><span class="thumb"></span><b>橙子柠檬片捏捏</b></button>
+    </div>
+  </section>
+  <section>
+    <h2>球皮捏捏</h2>
+    <div class="grid">
+      <button class="card glass" data-toy="malt" data-name="麦芽糖捏捏"><span class="thumb"></span><b>麦芽糖捏捏</b></button>
+      <button class="card glass" data-toy="bead" data-name="粉珠捏捏"><span class="thumb"></span><b>粉珠捏捏</b></button>
+      <button class="card glass" data-toy="pearl" data-name="蓝珠捏捏"><span class="thumb"></span><b>蓝珠捏捏</b></button>
+      <button class="card glass" data-toy="brick" data-name="积木捏捏"><span class="thumb"></span><b>积木捏捏</b></button>
+      <button class="card glass" data-toy="butter" data-name="凡士林黄油条捏捏"><span class="thumb"></span><b>凡士林黄油条捏捏</b></button>
+    </div>
+  </section>
+  <section>
+    <h2>气泡捏捏</h2>
+    <div class="grid">
+      <button class="card glass" data-toy="fizz" data-name="碳酸小袋子捏捏"><span class="thumb"></span><b>碳酸小袋子捏捏</b></button>
+      <button class="card glass" data-toy="fizzO" data-name="橘子气泡水捏捏"><span class="thumb"></span><b>橘子气泡水捏捏</b></button>
+      <button class="card glass" data-toy="fizzC" data-name="可乐气泡水捏捏"><span class="thumb"></span><b>可乐气泡水捏捏</b></button>
+      <button class="card glass" data-toy="fizzL" data-name="荔枝气泡水捏捏"><span class="thumb"></span><b>荔枝气泡水捏捏</b></button>
+    </div>
+  </section>
+  <section>
+    <h2>其他</h2>
+    <div class="grid">
+      <button class="card glass" data-toy="soap" data-name="肥皂球捏捏"><span class="thumb"></span><b>肥皂球捏捏</b></button>
+      <button class="card glass" data-toy="cake" data-name="草莓蛋糕"><span class="thumb"></span><b>草莓蛋糕</b></button>
+      <button class="card glass" data-toy="cat" data-name="奶油小猫"><span class="thumb"></span><b>奶油小猫</b></button>
+      <button class="card glass" data-toy="slime" data-name="史莱姆"><span class="thumb"></span><b>史莱姆</b></button>
+    </div>
+  </section>
+</div>
+<div id="err"></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script>
+  window.addEventListener('error', e => {
+    if (window.__loaded) return;
+    const el = document.getElementById('err');
+    el.style.display = 'flex';
+    el.textContent = '加载失败：' + (e.message || '请检查网络（需要从 CDN 加载 three.js）');
+  });
+</script>
+<script src="sounds.js"></script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { edgeTable, triTable } from 'three/addons/objects/MarchingCubes.js';
+
+/* ───────────────────────── 配置 ───────────────────────── */
+// 手感预设：全部用“弹簧常数”表达，与帧率无关
+const FEELS = {
+  bouncy: { kShape: 600, damp: 15, vol: 1.0,  spread: 0.24 }, // Q弹：回弹快、略带抖动、体积守恒会鼓包
+  slow:   { kShape: 36,  damp: 250, vol: 0.003, spread: 0.21 }, // 奶油感：软糯、回弹很慢，坑会留一会儿
+  water:  { kShape: 110, damp: 2.5, vol: 1.0, spread: 0.50 },   // 水感：像灌了水的球，软塌、一按别处就鼓、松手晃好几下
+
+};
+const TOOLS = {
+  // rate = 按下去的速度（越小阻力感越强）；grip = 指尖对表皮的抓力（1 = 捏住后能拎着肉拉扯）
+  poke:  { r: 0.17, maxDepth: 0.95, floor: 0.08, rate: 9,   grip: 0 },   // 单指，垂直于表面戳进去
+  pinch: { r: 0.18, maxDepth: 1.00, floor: 0.06, rate: 4.5, grip: 1,     // 同一只手的两根手指呈 ∧ 形夹住一块肉
+           spread: 0.66, sink: 0.52, hand: 1.9 },
+  palm:  { r: 1.75, keep: 0.45, floor: 0, rate: 1.8, grip: 0, plate: true },   // 平板从上往下压，越压越吃力
+};
+const SUBSTEPS = 6, GRAVITY = 6, K_ANCHOR = 150, FINGER_SPEED = 9;
+const coarse = matchMedia('(pointer: coarse)').matches;
+let feel = FEELS.bouncy, feelName = 'bouncy', toyName = 'cake', tool = 'poke';
+
+/* ───────────────────────── 渲染基础 ───────────────────────── */
+const canvas = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 3));      // 手机屏幕的像素密度常常是 3 倍；以前封顶在 2 倍，画面是放大显示的，所以发糊
+renderer.toneMapping = THREE.NeutralToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.localClippingEnabled = true;          // 蛋黄浆的液面用裁剪平面切出来
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.85;
+
+const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 50);
+camera.position.set(0, 1.9, 5.9);
+
+const key = new THREE.DirectionalLight(0xfff4ea, 2.2);
+key.position.set(-2.5, 5, 3.5);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: 1, far: 12 });
+key.shadow.bias = -0.0004; key.shadow.normalBias = 0.03; key.shadow.radius = 5;
+scene.add(key);
+const rim = new THREE.DirectionalLight(0xd9c8ff, 0.9); rim.position.set(3, 2, -3); scene.add(rim);
+
+// 托盘
+const plate = new THREE.Mesh(
+  new THREE.CylinderGeometry(2.3, 2.36, 0.1, 96),
+  new THREE.MeshPhysicalMaterial({ color: 0xfdf3ff, roughness: 0.55, clearcoat: 0.4, clearcoatRoughness: 0.4 })
+);
+plate.position.y = -0.05; plate.receiveShadow = true; scene.add(plate);
+
+/* ───────────────────────── 建模：二十面球细分 + 小熊外形 ───────────────────────── */
+function icosphere(level) {
+  const t = (1 + Math.sqrt(5)) / 2;
+  let v = [-1,t,0, 1,t,0, -1,-t,0, 1,-t,0, 0,-1,t, 0,1,t, 0,-1,-t, 0,1,-t, t,0,-1, t,0,1, -t,0,-1, -t,0,1];
+  let f = [0,11,5, 0,5,1, 0,1,7, 0,7,10, 0,10,11, 1,5,9, 5,11,4, 11,10,2, 10,7,6, 7,1,8,
+           3,9,4, 3,4,2, 3,2,6, 3,6,8, 3,8,9, 4,9,5, 2,4,11, 6,2,10, 8,6,7, 9,8,1];
+  for (let l = 0; l < level; l++) {
+    const cache = new Map(), nf = [];
+    const mid = (a, b) => {
+      const k = a < b ? a * 1e6 + b : b * 1e6 + a;
+      let m = cache.get(k);
+      if (m === undefined) {
+        m = v.length / 3;
+        v.push((v[a*3]+v[b*3])/2, (v[a*3+1]+v[b*3+1])/2, (v[a*3+2]+v[b*3+2])/2);
+        cache.set(k, m);
+      }
+      return m;
+    };
+    for (let i = 0; i < f.length; i += 3) {
+      const a = f[i], b = f[i+1], c = f[i+2], ab = mid(a,b), bc = mid(b,c), ca = mid(c,a);
+      nf.push(a,ab,ca, b,bc,ab, c,ca,bc, ab,bc,ca);
+    }
+    f = nf;
+  }
+  for (let i = 0; i < v.length; i += 3) {
+    const l = Math.hypot(v[i], v[i+1], v[i+2]); v[i] /= l; v[i+1] /= l; v[i+2] /= l;
+  }
+  return { dirs: new Float32Array(v), tris: new Uint32Array(f) };
+}
+
+const EARS = [[-0.66, 0.75, 0], [0.66, 0.75, 0]].map(e => { const l = Math.hypot(...e); return e.map(x => x / l); });
+function bearShape(x, y, z) {
+  let r = 1;
+  for (const e of EARS) {
+    const ex = x - e[0], ey = y - e[1], ez = z - e[2];      // 左右宽、前后薄 → 一片立着的圆耳朵
+    r += 0.5 * Math.max(0, 1 - Math.sqrt(ex*ex + ey*ey + ez*ez * 1.6) / 0.42);   // 肉乎乎的三角猫耳（圆锥形，前后略扁）
+  }
+  x *= r * 1.07; y *= r * 0.84; z *= r * 0.98;
+  const t = y + 0.5;                                  // 底部压平，像坐在桌面上
+  y = -0.5 + 0.625 * t + 0.375 * Math.sqrt(t * t + 0.015);
+  return [x, y, z];
+}
+
+/* 蛋糕：圆角矮圆柱 + 顶上一颗樱桃 + 一圈奶油球 */
+const CAKE = { R: 1.08, H: 0.52, P: 5, cherryW: 0.36, dollopW: 0.21,
+  dollops: Array.from({ length: 6 }, (_, k) => {
+    const a = (k + 0.5) / 6 * Math.PI * 2, v = [0.7 * Math.sin(a), 0.52, 0.7 * Math.cos(a)], l = Math.hypot(...v);
+    return v.map(x => x / l);
+  }) };
+function cakeBody(x, y, z) {        // 方向 → 圆角圆柱表面的半径
+  const rho = Math.hypot(x, z);
+  return Math.pow(Math.pow(rho / CAKE.R, CAKE.P) + Math.pow(Math.abs(y) / CAKE.H, CAKE.P), -1 / CAKE.P);
+}
+function cakeShape(x, y, z) {
+  let r = cakeBody(x, y, z);
+  if (y > 0) {
+    const a = Math.acos(Math.min(1, y));                                   // 樱桃：半球形鼓包
+    if (a < CAKE.cherryW) r += 0.3 * Math.sqrt(1 - (a / CAKE.cherryW) ** 2);
+    for (const d of CAKE.dollops) {                                         // 奶油球
+      const b = Math.acos(Math.min(1, x * d[0] + y * d[1] + z * d[2]));
+      if (b < CAKE.dollopW) r += 0.2 * Math.sqrt(1 - (b / CAKE.dollopW) ** 2);
+    }
+  }
+  return [x * r, y * r, z * r];
+}
+
+const { dirs, tris } = icosphere(coarse ? 4 : 5);
+const N = dirs.length / 3, T = tris.length / 3;
+const pos = new Float32Array(N * 3), prev = new Float32Array(N * 3), vel = new Float32Array(N * 3);
+const home = new Float32Array(N * 3), restN = new Float32Array(N * 3); let restShape = null, restMinY = 0, restCY = 0;   // 静止时的位置、法线、外形函数
+const q0 = new Float32Array(N * 3);          // 最初的静止形状（黏土被捏变形后，用它来算蜡壳该不该裂）
+const q = new Float32Array(N * 3), grad = new Float32Array(N * 3), nrm = new Float32Array(N * 3), press = new Float32Array(N);
+function setRest(shape) {          // 把静止形状换成某个捏捏的外形
+  let minY = Infinity;
+  for (let i = 0; i < N; i++) {
+    const p = shape(dirs[i*3], dirs[i*3+1], dirs[i*3+2]);
+    pos[i*3] = p[0]; pos[i*3+1] = p[1]; pos[i*3+2] = p[2];
+    if (p[1] < minY) minY = p[1];
+  }
+  let cx = 0, cy = 0, cz = 0;
+  for (let i = 0; i < N; i++) { pos[i*3+1] -= minY; cx += pos[i*3]; cy += pos[i*3+1]; cz += pos[i*3+2]; }
+  cx /= N; cy /= N; cz /= N;
+  for (let i = 0; i < N; i++) { q[i*3] = pos[i*3]-cx; q[i*3+1] = pos[i*3+1]-cy; q[i*3+2] = pos[i*3+2]-cz; }
+  prev.set(pos); vel.fill(0); q0.set(q);
+  meanEdge = 0;
+  for (let e = 0; e < E; e++) {
+    const i = edges[e*2]*3, j = edges[e*2+1]*3;
+    meanEdge += Math.hypot(q[i]-q[j], q[i+1]-q[j+1], q[i+2]-q[j+2]);
+  }
+  meanEdge /= E;
+  V0 = volumeAndGrad();
+  home.set(pos); restShape = shape; restMinY = minY; restCY = cy;
+  for (let i = 0; i < N * 3; i += 3) { const l = 1 / (Math.hypot(grad[i], grad[i+1], grad[i+2]) || 1); restN[i] = grad[i] * l; restN[i+1] = grad[i+1] * l; restN[i+2] = grad[i+2] * l; }
+}
+// 边表
+const edges = (() => {
+  const set = new Set(), out = [];
+  const add = (a, b) => { const k = a < b ? a * 1e6 + b : b * 1e6 + a; if (!set.has(k)) { set.add(k); out.push(a, b); } };
+  for (let i = 0; i < tris.length; i += 3) { add(tris[i], tris[i+1]); add(tris[i+1], tris[i+2]); add(tris[i+2], tris[i]); }
+  return new Uint32Array(out);
+})();
+const E = edges.length / 2;
+let meanEdge = 1;
+
+/* ───────────────────────── 物理：粒子软体 ─────────────────────────
+   表面每个顶点是一个粒子，每个子步：
+   1) 重力积分  2) 形状匹配（把粒子拉回静止形状，决定回弹快慢）
+   3) 邻边耦合（让凹陷带动周围皮肤，产生连续的形变和波纹）
+   4) 体积守恒（按下去别处会鼓起来）  5) 手指球 / 桌面碰撞
+   6) 由位置反推速度并加阻尼（决定 Q 弹还是慢回弹）                */
+const fingers = [];   // { c:Vector3, target:Vector3, r }
+let activity = 0, V0 = 0;
+
+function volumeAndGrad() {
+  grad.fill(0);
+  let V = 0;
+  for (let t = 0; t < T; t++) {
+    const a = tris[t*3]*3, b = tris[t*3+1]*3, c = tris[t*3+2]*3;
+    const ax = pos[a], ay = pos[a+1], az = pos[a+2];
+    const bx = pos[b], by = pos[b+1], bz = pos[b+2];
+    const cx = pos[c], cy = pos[c+1], cz = pos[c+2];
+    const bcx = by*cz - bz*cy, bcy = bz*cx - bx*cz, bcz = bx*cy - by*cx;
+    grad[a] += bcx; grad[a+1] += bcy; grad[a+2] += bcz;
+    grad[b] += cy*az - cz*ay; grad[b+1] += cz*ax - cx*az; grad[b+2] += cx*ay - cy*ax;
+    grad[c] += ay*bz - az*by; grad[c+1] += az*bx - ax*bz; grad[c+2] += ax*by - ay*bx;
+    V += ax*bcx + ay*bcy + az*bcz;
+  }
+  return V;
+}
+function substep(h) {
+  const h2 = h * h, n3 = N * 3;
+
+  // 手指以限速靠近目标，防止穿透表面
+  for (const f of fingers) {
+    const dx = f.target.x - f.c.x, dy = f.target.y - f.c.y, dz = f.target.z - f.c.z;
+    const d = Math.hypot(dx, dy, dz), m = FINGER_SPEED * h;
+    const s = d > m ? m / d : 1;
+    f.c.x += dx * s; f.c.y += dy * s; f.c.z += dz * s;
+  }
+
+  // 1) 积分
+  let cx = 0, cy = 0, cz = 0;
+  const gh = (feel.gravity ?? GRAVITY) * h;
+  for (let i = 0; i < n3; i += 3) {
+    vel[i+1] -= gh;
+    prev[i] = pos[i]; prev[i+1] = pos[i+1]; prev[i+2] = pos[i+2];
+    pos[i] += vel[i] * h; pos[i+1] += vel[i+1] * h; pos[i+2] += vel[i+2] * h;
+    cx += pos[i]; cy += pos[i+1]; cz += pos[i+2];
+  }
+  cx /= N; cy /= N; cz /= N;
+
+  // 2) 形状匹配 + 把整体轻轻拉回托盘中心
+  if (feel.fixed) { cx = 0; cy = restCY; cz = 0; }   // 黏土坐在原地：手指推它、捏着往上提，它都只是局部变形，不会整个被推走或拎起来
+  const a = Math.min(1, feel.kShape * h2), an = (feel.anchor ?? K_ANCHOR) * h2;
+  const ax = -cx * an, az = -cz * an;
+  for (let i = 0; i < n3; i += 3) {
+    pos[i]   += a * (cx + q[i]   - pos[i])   + ax;
+    pos[i+1] += a * (cy + q[i+1] - pos[i+1]);
+    pos[i+2] += a * (cz + q[i+2] - pos[i+2]) + az;
+  }
+
+  // 3) 邻边耦合：让相邻粒子的相对位移趋于一致
+  const sp = feel.spread / meanEdge, ke = feel.kShape * sp * sp;
+  const s = 1 / (2 + 1 / (ke * h2));
+  for (let e = 0; e < E; e++) {
+    const i = edges[e*2]*3, j = edges[e*2+1]*3;
+    const ex = (pos[i]   - pos[j]   - q[i]   + q[j])   * s;
+    const ey = (pos[i+1] - pos[j+1] - q[i+1] + q[j+1]) * s;
+    const ez = (pos[i+2] - pos[j+2] - q[i+2] + q[j+2]) * s;
+    pos[i] -= ex; pos[i+1] -= ey; pos[i+2] -= ez;
+    pos[j] += ex; pos[j+1] += ey; pos[j+2] += ez;
+  }
+
+  // 4) 体积守恒
+  const V = volumeAndGrad();
+  let g2 = 0;
+  for (let i = 0; i < n3; i++) g2 += grad[i] * grad[i];
+  if (feel.plastic) {
+    // 黏土会把形变“记住”。如果按面片大小分配体积补偿，被拉大的地方会分到更多、越鼓越大，最后冒出一坨；
+    // 所以这里改成整个表面沿法线均匀地鼓出同样的一点点。
+    let gs = 0;
+    for (let i = 0; i < n3; i += 3) gs += Math.sqrt(grad[i]*grad[i] + grad[i+1]*grad[i+1] + grad[i+2]*grad[i+2]);
+    const lamU = Math.max(-0.004, Math.min(0.004, -feel.vol * (V - V0 * volScale) / (gs + 1e-9)));
+    for (let i = 0; i < n3; i += 3) {
+      const l = lamU / (Math.sqrt(grad[i]*grad[i] + grad[i+1]*grad[i+1] + grad[i+2]*grad[i+2]) || 1);
+      pos[i] += grad[i] * l; pos[i+1] += grad[i+1] * l; pos[i+2] += grad[i+2] * l;
+    }
+  } else {
+    const lam = -feel.vol * (V - V0 * volScale) / (g2 + 1e-9);
+    for (let i = 0; i < n3; i++) pos[i] += lam * grad[i];
+  }
+
+  // 5) 碰撞：手指球 + 桌面（带粘滞摩擦）
+  const nf = fingers.length, gf = feel.slip ? 1 : 0.3;       // 黏土在桌面上不粘（否则底面被拖住的那部分形变会被“记住”，底部会被抹歪）
+  for (let i = 0; i < n3; i += 3) {
+    for (let k = 0; k < nf; k++) {
+      // 手指是“胶囊”：球形指尖 + 向后无限延伸的指身。
+      // 指尖把粒子沿手指方向往前顶（相当于带摩擦，表皮会包住指尖而不是从两侧滑开）；
+      // 只有从侧面蹭进指身的粒子才被径向推到指身表面。
+      const f = fingers[k], c = f.c, r = f.r;
+      const dx = pos[i] - c.x, dy = pos[i+1] - c.y, dz = pos[i+2] - c.z;
+      const along = dx * f.ax + dy * f.ay + dz * f.az;
+      const px = dx - along * f.ax, py = dy - along * f.ay, pz = dz - along * f.az;
+      const rho2 = px*px + py*py + pz*pz;
+      if (f.pinch) {
+        // 捏的手指：指身朝手掌方向 b，粒子沿“合拢方向” u 被指腹推出去
+        const tb = dx * f.bx + dy * f.by + dz * f.bz;
+        const qx = dx - tb * f.bx, qy = dy - tb * f.by, qz = dz - tb * f.bz;
+        const r2 = r * r, d2 = dx*dx + dy*dy + dz*dz;
+        if (tb >= 0 ? qx*qx + qy*qy + qz*qz >= r2 : d2 >= r2) continue;
+        const ub = f.ax * f.bx + f.ay * f.by + f.az * f.bz;
+        const vx = f.ax - ub * f.bx, vy = f.ay - ub * f.by, vz = f.az - ub * f.bz;
+        const A = vx*vx + vy*vy + vz*vz, B = qx*vx + qy*vy + qz*vz, C = qx*qx + qy*qy + qz*qz - r2;
+        let t = -1;
+        if (A > 1e-8 && C < 0) { const tc = (-B + Math.sqrt(B*B - A*C)) / A; if (tb + tc * ub >= 0) t = tc; }
+        if (t < 0) { const du = along, disc = du*du - (d2 - r2); t = disc > 0 ? -du + Math.sqrt(disc) : 0; }
+        pos[i] += t * f.ax; pos[i+1] += t * f.ay; pos[i+2] += t * f.az;
+        continue;
+      }
+      if (f.plate) {            // 平板：板面背后的粒子全部被推到板面上
+        if (along < 0) { pos[i] -= along * f.ax; pos[i+1] -= along * f.ay; pos[i+2] -= along * f.az; }
+        continue;
+      }
+      if (rho2 >= r * r) continue;
+      const fwd = Math.sqrt(r * r - rho2) - along;
+      if (fwd <= 0) continue;
+      const rho = Math.sqrt(rho2);
+      if (along >= 0 || fwd <= r - rho || rho < 1e-6) {
+        pos[i] += fwd * f.ax; pos[i+1] += fwd * f.ay; pos[i+2] += fwd * f.az;
+      } else {
+        const m = (r - rho) / rho;
+        pos[i] += px * m; pos[i+1] += py * m; pos[i+2] += pz * m;
+      }
+    }
+    if (pos[i+1] < 0) {
+      pos[i+1] = 0;
+      pos[i]   = prev[i]   + (pos[i]   - prev[i])   * gf;
+      pos[i+2] = prev[i+2] + (pos[i+2] - prev[i+2]) * gf;
+    }
+  }
+
+  // 5.5) 抓握：手指捏紧后，贴在指尖上的那片表皮被“捏住”，之后跟着手指一起走（可以拎起来拉扯）
+  for (let k = 0; k < nf; k++) {
+    const f = fingers[k];
+    if (!f.grip) continue;
+    const c = f.c;
+    if (!f.held && f.depth > f.maxDepth * 0.85) {
+      const idx = [], off = [], rr = f.r * f.r * 0.8;
+      for (let i = 0; i < n3; i += 3) {
+        const dx = pos[i] - c.x, dy = pos[i+1] - c.y, dz = pos[i+2] - c.z;
+        const along = dx * f.ax + dy * f.ay + dz * f.az;
+        if (along < -0.02 || along > f.r + 0.06) continue;
+        const px = dx - along * f.ax, py = dy - along * f.ay, pz = dz - along * f.az;
+        if (px*px + py*py + pz*pz < rr) { idx.push(i); off.push(dx, dy, dz); }
+      }
+      f.held = { idx, off };
+    }
+    if (f.held) {
+      const { idx, off } = f.held;
+      for (let j = 0; j < idx.length; j++) {
+        const i = idx[j];
+        pos[i] = c.x + off[j*3]; pos[i+1] = Math.max(0, c.y + off[j*3+1]); pos[i+2] = c.z + off[j*3+2];
+      }
+    }
+  }
+
+  // 6) 速度 + 阻尼（相对质心，整体运动不受影响）
+  let vx = 0, vy = 0, vz = 0;
+  const ih = 1 / h;
+  for (let i = 0; i < n3; i += 3) {
+    vel[i] = (pos[i] - prev[i]) * ih; vel[i+1] = (pos[i+1] - prev[i+1]) * ih; vel[i+2] = (pos[i+2] - prev[i+2]) * ih;
+    vx += vel[i]; vy += vel[i+1]; vz += vel[i+2];
+  }
+  vx /= N; vy /= N; vz /= N;
+  const kd = Math.exp(-feel.damp * h), kg = Math.exp(-1.5 * h);
+  let act = 0;
+  for (let i = 0; i < n3; i += 3) {
+    const rx = (vel[i] - vx) * kd, ry = (vel[i+1] - vy) * kd, rz = (vel[i+2] - vz) * kd;
+    vel[i] = (vx + rx) * kg; vel[i+1] = (vy + ry) * kg; vel[i+2] = (vz + rz) * kg;
+    act += rx*rx + ry*ry + rz*rz;
+  }
+  activity = Math.sqrt(act / N);
+
+  // 7) 塑性（黏土）：形变里超过屈服量的部分直接并入静止形状，所以捏成什么样就留成什么样
+  if (feel.plastic) {
+    let mx = 0, my = 0, mz = 0;
+    for (let i = 0; i < n3; i += 3) { mx += pos[i]; my += pos[i+1]; mz += pos[i+2]; }
+    mx /= N; my /= N; mz /= N;
+    if (feel.fixed) { mx = 0; my = restCY; mz = 0; }
+    const kp = 1 - Math.exp(-feel.plastic * h), yl = feel.yield, cap = feel.cap || 0.6;
+    for (let i = 0; i < n3; i += 3) {
+      const dx = pos[i] - mx - q[i], dy = pos[i+1] - my - q[i+1], dz = pos[i+2] - mz - q[i+2];
+      const d = Math.sqrt(dx*dx + dy*dy + dz*dz);
+      if (d > yl) { const m = kp * (1 - yl / d); q[i] += dx * m; q[i+1] += dy * m; q[i+2] += dz * m; }
+      const ex = q[i] - q0[i], ey = q[i+1] - q0[i+1], ez = q[i+2] - q0[i+2], e = Math.sqrt(ex*ex + ey*ey + ez*ez);
+      if (e > cap) { const m = cap / e; q[i] = q0[i] + ex * m; q[i+1] = q0[i+1] + ey * m; q[i+2] = q0[i+2] + ez * m; }   // 保险：离最初形状最多 0.6
+    }
+  }
+
+}
+
+/* ───────────────────────── 小熊外观 ───────────────────────── */
+// 蛋糕底色：逐像素把画布坐标反算成方向，再按“在蛋糕的哪个部位”上色
+let _cakeBase = null;
+function cakeBase() {
+  if (_cakeBase) return _cakeBase;
+  const S = 1024, cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const g = cv.getContext('2d'), img = g.createImageData(S, S), px = img.data;
+  const SPONGE = [250, 217, 160], CREAM = [255, 249, 240], PINK = [255, 190, 205], CHERRY = [226, 60, 84];
+  const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  const sm = (e0, e1, x) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
+  for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
+    const vx = ((i + 0.5) / S - 0.5) * 2, vy = (0.5 - (j + 0.5) / S) * 2, rc = Math.hypot(vx, vy) || 1e-6;
+    const th = Math.min(rc, 1) * Math.PI, sn = Math.sin(th);
+    const x = sn * vx / rc, y = sn * vy / rc, z = Math.cos(th);
+    const r = cakeBody(x, y, z), yN = r * y / CAKE.H;                       // yN：-1 底 … 1 顶
+    const phi = Math.atan2(x, z);
+    const drip = 0.5 - 0.42 * Math.pow(0.5 + 0.5 * Math.cos(phi * 7 + Math.PI), 2);   // 奶油往下淌的波浪边
+    let c = mix(SPONGE, CREAM, sm(drip - 0.03, drip + 0.03, yN));
+    if (y > 0) {
+      for (const d of CAKE.dollops) {
+        const b = Math.acos(Math.min(1, x * d[0] + y * d[1] + z * d[2]));
+        c = mix(c, PINK, 1 - sm(CAKE.dollopW + 0.015, CAKE.dollopW + 0.05, b));
+      }
+      const a = Math.acos(Math.min(1, y));
+      c = mix(c, CHERRY, 1 - sm(CAKE.cherryW + 0.015, CAKE.cherryW + 0.05, a));
+    }
+    const o = (j * S + i) * 4;
+    px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2]; px[o + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  return (_cakeBase = cv);
+}
+function makeCakeFace(squeezed) {
+  const S = 2048, cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const g = cv.getContext('2d'), K = S * 0.5 / Math.PI;
+  const P = (x, y, z) => {
+    const l3 = Math.hypot(x, y, z); x /= l3; y /= l3; z /= l3;
+    const th = Math.acos(z), l = Math.hypot(x, y) || 1;
+    return [(0.5 + x / l * th / Math.PI * 0.5) * S, (1 - (0.5 + y / l * th / Math.PI * 0.5)) * S];
+  };
+  const blob = (x, y, r, c0, c1) => {
+    const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, c0); gr.addColorStop(1, c1);
+    g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  };
+  g.imageSmoothingQuality = 'high'; g.drawImage(cakeBase(), 0, 0, S, S);
+  for (const sx of [-1, 1]) {
+    let [x, y] = P(sx * 0.5, -0.19, 1);                                               // 腮红
+    blob(x, y, (squeezed ? 0.2 : 0.15) * K, `rgba(255,120,150,${squeezed ? .85 : .6})`, 'rgba(255,120,150,0)');
+    [x, y] = P(sx * 0.27, -0.06, 1);                                                  // 眼睛
+    if (squeezed) {
+      const a = 0.075 * K;
+      g.strokeStyle = '#4a3228'; g.lineWidth = 0.032 * K; g.lineCap = g.lineJoin = 'round';
+      g.beginPath(); g.moveTo(x + sx * a, y - a); g.lineTo(x - sx * a * 0.7, y); g.lineTo(x + sx * a, y + a); g.stroke();
+    } else {
+      g.fillStyle = '#4a3228'; g.beginPath(); g.ellipse(x, y, 0.062 * K, 0.078 * K, 0, 0, 7); g.fill();
+      g.fillStyle = '#fff'; g.beginPath(); g.arc(x - 0.02 * K, y - 0.03 * K, 0.025 * K, 0, 7); g.fill();
+      g.beginPath(); g.arc(x + 0.023 * K, y + 0.027 * K, 0.011 * K, 0, 7); g.fill();
+    }
+  }
+  const [mx, my] = P(0, -0.18, 1);                                                    // 嘴
+  if (squeezed) {
+    g.fillStyle = '#d9707e'; g.beginPath(); g.ellipse(mx, my + 0.01 * K, 0.036 * K, 0.046 * K, 0, 0, 7); g.fill();
+  } else {
+    g.strokeStyle = '#6b4636'; g.lineWidth = 0.02 * K; g.lineCap = 'round';
+    for (const sx of [-1, 1]) { g.beginPath(); g.arc(mx + sx * 0.04 * K, my - 0.02 * K, 0.04 * K, 0, Math.PI); g.stroke(); }
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  return tex;
+}
+function makeCatFace(squeezed) {
+  const S = 2048, cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const g = cv.getContext('2d'), K = S * 0.5 / Math.PI;       // K = 每弧度像素
+  // 与片元着色器相同的“等距方位投影”：正面(+z)在画布中心
+  const P = (x, y, z) => {
+    const l3 = Math.hypot(x, y, z); x /= l3; y /= l3; z /= l3;
+    const th = Math.acos(z), l = Math.hypot(x, y) || 1;
+    return [(0.5 + x / l * th / Math.PI * 0.5) * S, (1 - (0.5 + y / l * th / Math.PI * 0.5)) * S];
+  };
+  const blob = (x, y, r, c0, c1) => {
+    const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, c0); gr.addColorStop(1, c1);
+    g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  };
+  g.fillStyle = '#ffeedb'; g.fillRect(0, 0, S, S);
+  blob(S/2, S*0.56, S*0.3, 'rgba(255,250,244,.9)', 'rgba(255,250,244,0)');           // 肚皮提亮
+  for (const sx of [-1, 1]) {
+    let [x, y] = P(sx * 0.66, 0.75, 0);                                               // 内耳：奶油色耳朵正面中间的一块粉色小三角
+    g.save(); g.translate(x, y); g.rotate(Math.atan2(y - S / 2, x - S / 2));          // 局部 -x = 朝正面，y = 沿耳朵左右
+    g.fillStyle = g.strokeStyle = '#f9a8b8'; g.lineWidth = 0.03 * K; g.lineJoin = 'round';
+    g.beginPath(); g.moveTo(-0.09 * K, 0); g.lineTo(-0.27 * K, 0.21 * K); g.lineTo(-0.27 * K, -0.21 * K); g.closePath();
+    g.fill(); g.stroke(); g.restore();
+    [x, y] = P(sx * 0.52, 0.1, 1);                                                  // 腮红
+    blob(x, y, (squeezed ? 0.22 : 0.17) * K, `rgba(255,120,150,${squeezed ? .85 : .6})`, 'rgba(255,120,150,0)');
+    [x, y] = P(sx * 0.3, 0.36, 1);                                                     // 眼睛
+    if (squeezed) {
+      const a = 0.085 * K;
+      g.strokeStyle = '#4a3228'; g.lineWidth = 0.034 * K; g.lineCap = g.lineJoin = 'round';
+      g.beginPath(); g.moveTo(x + sx * a, y - a); g.lineTo(x - sx * a * 0.7, y); g.lineTo(x + sx * a, y + a); g.stroke();
+    } else {
+      g.fillStyle = '#4a3228'; g.beginPath(); g.ellipse(x, y, 0.07 * K, 0.088 * K, 0, 0, 7); g.fill();
+      g.fillStyle = '#fff'; g.beginPath(); g.arc(x - 0.022 * K, y - 0.034 * K, 0.028 * K, 0, 7); g.fill();
+      g.beginPath(); g.arc(x + 0.026 * K, y + 0.03 * K, 0.012 * K, 0, 7); g.fill();
+    }
+  }
+  const [nx, ny] = P(0, 0.2, 1);                                                    // 鼻子嘴巴
+  g.fillStyle = '#ee8fa2'; g.strokeStyle = '#ee8fa2'; g.lineWidth = 0.016 * K; g.lineJoin = 'round';
+  g.beginPath(); g.moveTo(nx - 0.042 * K, ny - 0.024 * K); g.lineTo(nx + 0.042 * K, ny - 0.024 * K); g.lineTo(nx, ny + 0.028 * K); g.closePath();
+  g.fill(); g.stroke();
+  if (squeezed) {
+    g.fillStyle = '#d9707e'; g.beginPath(); g.ellipse(nx, ny + 0.115 * K, 0.04 * K, 0.052 * K, 0, 0, 7); g.fill();
+  } else {
+    g.strokeStyle = '#6b4636'; g.lineWidth = 0.02 * K; g.lineCap = 'round';
+    for (const sx of [-1, 1]) { g.beginPath(); g.arc(nx + sx * 0.045 * K, ny + 0.045 * K, 0.045 * K, 0, Math.PI); g.stroke(); }
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  return tex;
+}
+
+const stain = new Float32Array(N);                  // 每个顶点被浆染了多少（0~1）
+const knead = new Float32Array(N);                  // 每个顶点被揉了多少（0~1）：越大，那里的颜色混得越匀
+const colDir = new Float32Array(N * 3);             // 每个顶点现在“是哪里的颜色”：一开始等于自己的静止方向，搅拌时被带着转
+const geo = new THREE.BufferGeometry();
+geo.setAttribute('colDir', new THREE.BufferAttribute(colDir, 3).setUsage(THREE.DynamicDrawUsage));
+geo.setAttribute('knead', new THREE.BufferAttribute(knead, 1).setUsage(THREE.DynamicDrawUsage));
+geo.setAttribute('stain', new THREE.BufferAttribute(stain, 1).setUsage(THREE.DynamicDrawUsage));
+geo.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
+geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3).setUsage(THREE.DynamicDrawUsage));
+geo.setAttribute('press', new THREE.BufferAttribute(press, 1).setUsage(THREE.DynamicDrawUsage));
+geo.setAttribute('restDir', new THREE.BufferAttribute(dirs, 3));
+geo.setIndex(new THREE.BufferAttribute(tris, 1));
+geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.8, 0), 4);
+
+const faceU = { faceA: { value: null }, faceB: { value: null }, faceMix: { value: 0 }, pressTint: { value: new THREE.Vector3(0.93, 0.66, 0.68) }, stainCol: { value: new THREE.Vector3(1.0, 0.36, 0.02) },
+                holes: { value: [new THREE.Vector4(0, 0, 1, 2), new THREE.Vector4(0, 0, 1, 2), new THREE.Vector4(0, 0, 1, 2)] } };   // 破口：xyz = 方向，w = cos(半径)；w = 2 表示没有
+const skin = new THREE.MeshPhysicalMaterial({
+  roughness: 0.4, clearcoat: 0.35, clearcoatRoughness: 0.4,
+  sheen: 0.7, sheenColor: new THREE.Color(0xffd9e2), sheenRoughness: 0.5,
+});
+// 贴图不走 UV，而是按“静止方向”在片元里投影，球面上没有接缝，脸会跟着形变一起被捏扁
+skin.onBeforeCompile = sh => {
+  Object.assign(sh.uniforms, faceU);
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', '#include <common>\nattribute vec3 restDir;\nattribute float press;\nattribute float stain;\nattribute float knead;\nattribute vec3 colDir;\nvarying vec3 vColDir;\nvarying vec3 vRestDir;\nvarying float vPress;\nvarying float vStain;\nvarying float vKnead;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRestDir = restDir;\nvPress = press;\nvStain = stain;\nvKnead = knead;\nvColDir = colDir;');
+  sh.fragmentShader = sh.fragmentShader
+    .replace('#include <common>', '#include <common>\nuniform sampler2D faceA;\nuniform sampler2D faceB;\nuniform float faceMix;\nuniform vec3 pressTint;\nuniform vec3 stainCol;\nuniform vec4 holes[3];\nvarying vec3 vRestDir;\nvarying float vPress;\nvarying float vStain;\nvarying float vKnead;\nvarying vec3 vColDir;')
+    .replace('#include <map_fragment>', `
+      vec3 rd = normalize(vRestDir);
+      float torn = 0.0;                                        // 破口：洞里的黏土直接不画，洞边一圈压深一点，像撕开的断口
+      for (int hi = 0; hi < 3; hi++) {
+        float hd = dot(rd, holes[hi].xyz) + 0.0022 * sin(atan(rd.y - holes[hi].y, rd.x - holes[hi].x) * 7.0);   // 洞的边缘不是正圆，有点毛
+        if (hd > holes[hi].w) discard;
+        torn = max(torn, smoothstep(holes[hi].w - 0.03, holes[hi].w, hd));
+      }
+      vec3 cd = normalize(vColDir);                            // 颜色按“被搅过之后的方向”取，花纹就是这么来的
+      float th = acos(clamp(cd.z, -1.0, 1.0));
+      float rl = length(cd.xy);
+      vec2 fuv = vec2(0.5) + (rl > 1e-5 ? cd.xy / rl : vec2(0.0)) * th * 0.15915494;
+      float kb = 9.0 * clamp(vKnead, 0.0, 1.0) * clamp(vKnead, 0.0, 1.0);                  // 揉过的地方取更模糊的贴图 = 周围的颜色混在一起；揉透了就是整块的平均色
+      diffuseColor.rgb *= mix(texture2D(faceA, fuv, kb).rgb, texture2D(faceB, fuv, kb).rgb, faceMix);
+      // 被按下去的地方变暗、透出一点粉色：模拟凹陷处的遮蔽和硅胶被挤压的透光
+      diffuseColor.rgb = mix(diffuseColor.rgb, stainCol, 0.85 * smoothstep(0.0, 1.0, vStain));     // 被浆染色
+      float pr = smoothstep(0.0, 1.0, vPress);
+      diffuseColor.rgb *= mix(vec3(1.0), pressTint, pr);
+      diffuseColor.rgb *= 1.0 - 0.28 * torn;
+    `);
+};
+// 不同手感配不同质感：硅胶微亮、奶油哑光、水感湿亮
+const LOOKS = {
+  bouncy: { roughness: 0.4,  clearcoat: 0.35, clearcoatRoughness: 0.4 },
+  slow:   { roughness: 0.62, clearcoat: 0.05, clearcoatRoughness: 0.6 },
+  water:  { roughness: 0.12, clearcoat: 1.0,  clearcoatRoughness: 0.06 },
+};
+const bear = new THREE.Mesh(geo, skin);
+bear.castShadow = true; bear.receiveShadow = true; bear.frustumCulled = false;
+scene.add(bear);
+
+function syncMesh() {
+  let cx = 0, cy = 0, cz = 0;
+  for (let i = 0; i < N * 3; i += 3) { cx += pos[i]; cy += pos[i+1]; cz += pos[i+2]; }
+  cx /= N; cy /= N; cz /= N;
+  for (let i = 0, k = 0; i < N * 3; i += 3, k++) {       // 体积梯度 = 面积加权法线，直接复用
+    const l = 1 / (Math.hypot(grad[i], grad[i+1], grad[i+2]) || 1);
+    nrm[i] = grad[i] * l; nrm[i+1] = grad[i+1] * l; nrm[i+2] = grad[i+2] * l;
+    // 沿法线向内的位移量 → 着色器里的“按压程度”
+    const inward = (cx + q[i] - pos[i]) * nrm[i] + (cy + q[i+1] - pos[i+1]) * nrm[i+1] + (cz + q[i+2] - pos[i+2]) * nrm[i+2];
+    press[k] = inward > 0 ? Math.min(1, inward * 2.2) : 0;
+  }
+  geo.attributes.press.needsUpdate = true;
+  geo.attributes.position.needsUpdate = true;
+  geo.attributes.normal.needsUpdate = true;
+}
+
+/* ───────────────────────── 交互 ───────────────────────── */
+const controls = (() => {
+  // 先注册自己的 pointerdown，再创建 OrbitControls，这样点到小熊时可以抢先禁用旋转
+  canvas.addEventListener('pointerdown', onDown);
+  const c = new OrbitControls(camera, canvas);
+  c.target.set(0, 0.72, 0); c.enablePan = false; c.enableDamping = true;
+  c.minDistance = 3.5; c.maxDistance = 13; c.maxPolarAngle = Math.PI * 0.49; c.minPolarAngle = 0.25;
+  c.update();
+  return c;
+})();
+
+const raycaster = new THREE.Raycaster(), ndc = new THREE.Vector2();
+const touches = new Map();     // pointerId → { o, d, list:[finger] }
+const fingerGeo = new THREE.CapsuleGeometry(1, 6, 16, 40).translate(0, -3, 0);   // 指尖球心在原点，指身沿 -Y
+const plateGeo = new THREE.CylinderGeometry(1, 1, 0.07, 72).translate(0, -0.035, 0); // 板面在原点，板身沿 -Y
+const _up = new THREE.Vector3(0, 1, 0), _ax = new THREE.Vector3();
+const fingerMat = new THREE.MeshPhysicalMaterial({ color: 0xffe3d6, transparent: true, opacity: 0.42, roughness: 0.25, depthWrite: false });
+const plateMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, opacity: 0.22, roughness: 0.08, depthWrite: false, side: THREE.DoubleSide });
+let squeezeCount = 0;
+const showHand = false;          // 手指和压板只参与物理，不画出来
+
+function setRay(e) {
+  const r = canvas.getBoundingClientRect();
+  ndc.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+}
+// 每根手指：base = 触点锚点 + off（按下时所在的表面点），沿 axis 方向往里推 depth
+function makeFinger(touch, off, axis, cfg, maxDepth, pinch) {
+  const f = { touch, off, r: cfg.r, floor: cfg.floor, plate: !!cfg.plate, depth: 0, maxDepth,
+              rate: cfg.rate, grip: cfg.grip, held: null, pinch: pinch || null, bx: 0, by: 1, bz: 0, cfg,
+              ax: axis.x, ay: axis.y, az: axis.z,
+              c: new THREE.Vector3(), target: new THREE.Vector3(),
+              mesh: new THREE.Mesh(cfg.plate ? plateGeo : fingerGeo, cfg.plate ? plateMat : fingerMat) };
+  if (f.plate) f.mesh.scale.set(cfg.r, 1, cfg.r); else f.mesh.scale.setScalar(cfg.r * 0.97);
+  f.mesh.quaternion.setFromUnitVectors(_up, axis);
+  f.mesh.renderOrder = 2; f.mesh.visible = showHand;
+  aim(f); f.c.copy(f.target); aim(f);
+  scene.add(f.mesh); fingers.push(f); touch.list.push(f);
+}
+function aim(f) {
+  if (f.pinch) {
+    // 先往肉里按（sink），同时两指尖向中间合拢；指身始终指向上方的“手”
+    const { sg, s, n } = f.pinch, a = f.touch.anchor, c = f.cfg;
+    const lat = sg * (c.spread - (c.spread - f.r - 0.035) * f.depth);
+    const up = f.r - c.sink * Math.min(1, f.depth * 2.2);
+    f.target.set(a.x + s.x * lat + n.x * up, a.y + s.y * lat + n.y * up, a.z + s.z * lat + n.z * up);
+    if (f.target.y < f.r + f.floor) f.target.y = f.r + f.floor;
+    _ax.set(a.x + n.x * c.hand - f.c.x, a.y + n.y * c.hand - f.c.y, a.z + n.z * c.hand - f.c.z).normalize();
+    f.bx = _ax.x; f.by = _ax.y; f.bz = _ax.z;
+    f.mesh.quaternion.setFromUnitVectors(_up, _ax.negate());
+    return;
+  }
+  const t = f.touch, back = f.plate ? 0 : f.r, d = f.depth - back;
+  f.target.set(t.anchor.x + f.off.x + f.ax * d, t.anchor.y + f.off.y + f.ay * d, t.anchor.z + f.off.z + f.az * d);
+  if (f.plate) return;          // 平板的行程在按下时已经算好，不需要再限制高度
+  const minY = f.r + f.floor;
+  if (f.target.y < minY) f.target.y = minY;
+}
+const _side = new THREE.Raycaster();
+function onDown(e) {
+  if (e.button > 0) return;
+  setRay(e);
+  const fluid = !!TOYS[toyName].fluid;
+  const hit = fluid ? slimePick(raycaster.ray) : raycaster.intersectObject(bear)[0];
+  if (!hit) return;
+  controls.enabled = false;
+  try { canvas.setPointerCapture(e.pointerId); } catch {}
+  let cfg = TOOLS[tool];
+  const sz = TOYS[toyName].size;
+  if (TOYS[toyName].pressK) cfg = { ...cfg, rate: cfg.rate * TOYS[toyName].pressK };      // 硬一点的捏捏：手指按进去更慢、更吃力
+  if (sz) { cfg = { ...cfg }; for (const k of ['r', 'maxDepth', 'floor', 'spread', 'sink', 'hand']) if (cfg[k]) cfg[k] *= sz; }      // 小一号的捏捏：手指也跟着小一号
+  const touch = { t0: hit.distance, anchor: hit.point.clone(), home: hit.point.clone(), reach: cfg.grip ? (fluid ? 2.2 : 0.9) : 99, list: [] };
+  touches.set(e.pointerId, touch);
+  const zero = new THREE.Vector3();
+  if (tool === 'poke') {
+    // 戳：手指沿表面法线垂直戳入
+    const n = (hit.normal || hit.face.normal).clone().normalize();
+    makeFinger(touch, zero, n.negate(), cfg, cfg.maxDepth * (TOYS[toyName].pokeK || 1));
+  } else if (tool === 'pinch') {
+    // 捏：像真人的手——拇指和食指从同一侧（表面外）伸过来，呈 ∧ 形，指尖按进肉里再向中间合拢
+    const n = (hit.normal || hit.face.normal).clone().normalize();
+    const s = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);      // 两指在屏幕上一上一下
+    s.addScaledVector(n, -s.dot(n));
+    if (s.lengthSq() < 0.01) s.setFromMatrixColumn(camera.matrixWorld, 0).addScaledVector(n, -s.dot(n));
+    s.normalize();
+    for (const sg of [1, -1]) makeFinger(touch, zero, s.clone().multiplyScalar(-sg), cfg, cfg.maxDepth, { sg, s, n });
+    if (!fluid) touch.fixed = true;                    // 捏：只算“按下去、拿起来”这一下，按住时拖动鼠标不带着肉走（史莱姆除外，它要能拉丝）
+  } else {
+    // 压：平板贴在按下的位置，朝着“按下点 → 底部中心”的方向压过去
+    const A = fluid ? sp : pos, AN = fluid ? SL.n : N;
+    let mx = 0, mz = 0;
+    for (let i = 0; i < AN * 3; i += 3) { mx += A[i]; mz += A[i+2]; }
+    const axis = new THREE.Vector3(mx / AN, 0, mz / AN).sub(hit.point);
+    const dist = axis.length();                        // 按下点到底部中心的距离
+    axis.normalize();
+    let lo = Infinity;                                 // 沿压的方向最靠外的那个点：平板从那里开始接触
+    for (let i = 0; i < AN * 3; i += 3) { const d = A[i] * axis.x + A[i+1] * axis.y + A[i+2] * axis.z; if (d < lo) lo = d; }
+    const back = lo - hit.point.dot(axis);             // ≤ 0
+    const travel = (dist - back) * (1 - cfg.keep);     // 最多压掉这么多，剩下 keep 比例的厚度
+    touch.fixed = true;                                // 平板按下后不跟随拖动，避免被拖过头把捏捏压穿
+    makeFinger(touch, axis.clone().multiplyScalar(back), axis, cfg, travel);
+  }
+  canvas.style.cursor = 'grabbing';
+  squeezeCount++;
+  navigator.vibrate?.(8);
+  const snd = TOYS[toyName].sound;
+  fluid || snd === 'gel' ? sfx.slimePress() : TOYS[toyName].wax || snd === 'crisp' || snd === 'fizz' || snd === 'sponge' ? sfx.wake() : sfx.press();          // 黏土按下去没声音，声音都来自蜡壳开裂
+}
+function onMove(e) {
+  const touch = touches.get(e.pointerId);
+  if (!touch || touch.fixed) return;
+  setRay(e);                   // 拖动时锚点跟着鼠标在同一深度上移动，手指方向保持不变
+  raycaster.ray.at(touch.t0, touch.anchor);
+  const pull = touch.anchor.distanceTo(touch.home);        // 捏着拉扯时限制最远距离，免得拉成面条
+  if (pull > touch.reach) touch.anchor.lerp(touch.home, 1 - touch.reach / pull);
+}
+function onUp(e) {
+  const touch = touches.get(e.pointerId);
+  if (!touch) return;
+  for (const f of touch.list) { scene.remove(f.mesh); fingers.splice(fingers.indexOf(f), 1); }
+  touches.delete(e.pointerId);
+  if (!touches.size) { controls.enabled = true; canvas.style.cursor = 'grab'; }
+  TOYS[toyName].fluid || TOYS[toyName].sound === 'gel' ? sfx.slimeRelease() : TOYS[toyName].sound === 'sponge' ? sfx.slimeRelease() : TOYS[toyName].wax || TOYS[toyName].sound === 'crisp' || TOYS[toyName].sound === 'fizz' ? 0 : sfx.release();
+}
+canvas.addEventListener('pointermove', onMove);
+canvas.addEventListener('pointerup', onUp);
+canvas.addEventListener('pointercancel', onUp);
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+for (const b of document.querySelectorAll('#tools button')) b.onclick = () => {
+  tool = b.dataset.tool;
+  document.querySelectorAll('#tools button').forEach(x => x.classList.toggle('on', x === b));
+};
+for (const b of document.querySelectorAll('#feel button')) b.onclick = () => {
+  feelName = b.dataset.feel;
+  applyFeel();
+  document.querySelectorAll('#feel button').forEach(x => x.classList.toggle('on', x === b));
+};
+
+/* ───────────────────────── 声音（WebAudio 合成，无需素材） ───────────────────────── */
+const sfx = (() => {
+  let ctx, squish, filter, noiseBuf, on = true;
+  const btn = document.getElementById('sound');
+  btn.onclick = () => { on = !on; btn.textContent = on ? '🔊' : '🔇'; if (!on && squish) squish.gain.value = 0; if (!on && fizzGain) { fizzGain.gain.cancelScheduledValues(0); fizzGain.gain.value = 0; } };
+  function init() {
+    if (ctx) return;
+    ctx = new AudioContext();
+    const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    noiseBuf = buf;
+    const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+    filter = ctx.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.value = 600; filter.Q.value = 1.4;
+    squish = ctx.createGain(); squish.gain.value = 0;
+    src.connect(filter).connect(squish).connect(ctx.destination); src.start();
+    loadSamples();
+  }
+  // ── 录音素材（sounds.js，AI 生成的真实音效）：每段录音里标好了一下一下的“响”，要出声时随机挑一下来放，
+  //    音高随机变一点，所以不会听出是同一段在重复。素材没加载到（或还没解码完）时，仍然用下面合成的声音顶上。
+  const SND = window.NIE_SOUNDS; let bufs = {}, kit = 'wax', lastGrain = 0, fizzGain = null;
+  function loadSamples() {
+    bufs = {}; fizzGain = null; waxOut = null; fizzOut = null;
+    if (!SND) return;
+    const c = ctx, mine = bufs;
+    for (const n in SND.meta) SND.load(n).then(ab => new Promise((res, rej) => { const p = c.decodeAudioData(ab, res, rej); if (p && p.catch) p.catch(() => {}); }))
+      .then(b => { if (ctx === c) mine[n] = b; }).catch(() => {});
+  }
+  function grain(name, vol, maxDur = 0.4, delay = 0, pitch = 0, fixed = 0, glide = 1, out = null) {      // pitch：指定音高（不给就随机）；fixed：不管这一下本身多长，固定放这么久
+    const b = bufs[name]; if (!b || !on) return false;
+    const m = SND.meta[name].on, sg = m[(Math.random() * m.length) | 0], r = pitch || 0.85 + Math.random() * 0.4, d = fixed || Math.min(sg[1], maxDur), t = ctx.currentTime + delay, v = vol / Math.max(0.06, sg[2]);
+    const src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = b;
+    try { src.playbackRate.setValueAtTime(r, t); if (glide !== 1) src.playbackRate.linearRampToValueAtTime(r * glide, t + d / r); } catch (e) { try { src.playbackRate.value = r; } catch (e2) {} }      // glide < 1：这一下的音高往下滑
+    g.gain.setValueAtTime(v, t); g.gain.setValueAtTime(v, t + d / r * 0.7); g.gain.linearRampToValueAtTime(0.0001, t + d / r);
+    src.connect(g).connect(out || ctx.destination); src.start(t, sg[0], d + 0.02);
+    return true;
+  }
+  let waxOut = null, fizzOut = null, lastOpen = 0;
+  function thick() {                  // 蜡壳的出口：削掉一些最尖的高频，再把低处垫厚一点
+    if (!waxOut) { waxOut = ctx.createBiquadFilter(); waxOut.type = 'lowpass'; waxOut.frequency.value = 5200; waxOut.Q.value = 0.5;
+      const sh = ctx.createBiquadFilter(); sh.type = 'lowshelf'; sh.frequency.value = 420; sh.gain.value = 7; waxOut.connect(sh).connect(ctx.destination); }
+    return waxOut;
+  }
+  function blip(f0, f1, vol, dur) {
+    if (!on || !ctx) return;
+    const o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime;
+    o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + dur);
+  }
+  // ── 史莱姆的声音：完全不用噪声（噪声听起来是“沙沙”），全部由“小气泡”叠出来 ──
+  // 一个气泡 = 一小段很快衰减、音高略微上滑的纯音；几十毫秒里密集地响一串，听起来就是湿、黏、咕叽
+  let wet = null, bubbles = 0, quietUntil = 0, cracks = 0, pressAt = 0;
+  function bubble(at, f, dur, vol, rise) {
+    if (!on || !ctx) return;
+    if (!wet) { wet = ctx.createBiquadFilter(); wet.type = 'lowpass'; wet.frequency.value = 7000; wet.connect(ctx.destination); }
+    const o = ctx.createOscillator(), g = ctx.createGain(), t = Math.max(at, ctx.currentTime);
+    o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * (1 + rise), t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.001); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(wet); o.start(t); o.stop(t + dur + 0.01); bubbles++;
+  }
+  function squelch(down, strength, delay = 0, stretch = 1) {      // 一串气泡；down = 按进去（音高往下走，“咕”），否则是拔出来（往上走，“叽”）
+    if (!on || !ctx) return;
+    const t0 = ctx.currentTime + delay, n = Math.round((8 + 8 * strength) * Math.sqrt(stretch)), span = (0.11 + 0.07 * strength) * stretch;
+    for (let i = 0; i < n; i++) {
+      const x = i / (n - 1), u = down ? 1 - x : x;
+      const f = (700 + 1500 * u) * (0.8 + Math.random() * 0.4);
+      bubble(t0 + x * span + Math.random() * 0.012, f, 0.008 + Math.random() * 0.012, (0.05 + 0.07 * Math.random()) * (0.6 + 0.5 * strength), 0.25 + Math.random() * 0.5);
+    }
+  }
+  return {
+    slimePress() { init(); ctx.resume(); quietUntil = ctx.currentTime + 0.45; },     // 真的史莱姆按下去是没声音的，只启动音频、不发声
+    slimeRelease() {                      // 黏着拔出来的一串 + 最后一声“啵”
+      if (!on || !ctx) return;
+      if (grain('slime', 0.5, 0.45)) return;
+      squelch(false, 0.5);
+      bubble(ctx.currentTime + 0.14, 900 + Math.random() * 200, 0.022, 0.24, 1.2);
+    },
+    slimeMove(act, dt, pressingIn) {                  // 揉、拉、流动的时候：动得越厉害，冒的小气泡越密
+      if (!on || !ctx) return;
+      squish.gain.setTargetAtTime(0, ctx.currentTime, 0.03);
+      if (pressingIn || ctx.currentTime < quietUntil) return;             // 手指还在往里按的时候保持安静
+      if (bufs.slime) {                                                   // 有录音：揉得越厉害，咕叽得越密（每秒最多七八下）
+        let n = Math.min(7, Math.max(0, act - 0.035) * 22) * dt; if (Math.random() < n) grain('slime', 0.22 + Math.random() * 0.14, 0.3);
+        return;
+      }
+      const rate = Math.min(45, Math.max(0, act - 0.035) * 140);          // 每秒几个气泡
+      let k = rate * dt; k = Math.floor(k) + (Math.random() < k % 1 ? 1 : 0);
+      for (let i = 0; i < k; i++) bubble(ctx.currentTime + Math.random() * dt, 800 + Math.random() * 1800, 0.007 + Math.random() * 0.011, 0.03 + Math.random() * 0.05, 0.2 + Math.random() * 0.5);
+    },
+    get bubbles() { return bubbles; },
+    wake() { init(); if (ctx.state !== 'running') ctx.resume(); },
+    get started() { return !!ctx; },
+    revive() {                          // 扔掉旧的音频、重新建一套（必须在用户碰屏幕的那一下里调用）
+      try { if (ctx) ctx.close(); } catch (e) {}
+      ctx = null; wet = null; squish = null; filter = null; quietUntil = 0;
+      init(); if (ctx.state !== 'running') ctx.resume();
+    },
+    crack(count, snapped) {             // 蜡壳开裂：几下很短的高频“咔”，掉壳时更响一点
+      if (!on || !ctx) return;
+      if (kit === 'soap' && bufs.soap) {                // 肥皂：一粒粒碎开的碎响，很短、很密（粉珠 / 蓝珠 / 积木用的是下面原来合成的声音）
+        const t = ctx.currentTime; if (t - lastGrain < 0.03) return; lastGrain = t;
+        grain('soap', (snapped ? 0.5 : 0.3) * (0.6 + Math.random() * 0.6), 0.13); cracks++; return;
+      }
+      let under = 1;
+      if (kit === 'wax' && bufs.crack1 && bufs.crack2 && (snapped || ctx.currentTime - lastGrain > 0.035)) {      // 蜡壳：又脆又酥——一串很短的脆响连着响，一下比一下低、一下比一下轻
+        lastGrain = ctx.currentTime;
+        const n = Math.min(6, 2 + count + (snapped ? 1 : 0)), p0 = 0.98 + Math.random() * 0.16, o = thick(); let at = 0;
+        for (let i = 0; i < n; i++) {
+          grain(Math.random() < 0.5 ? 'crack1' : 'crack2', (snapped ? 0.62 : 0.42) * (1 - 0.1 * i) * (0.7 + Math.random() * 0.5), 0.16, at, p0 - 0.06 * i, 0, 0.8, o);
+          at += 0.014 + Math.random() * 0.028;
+        }
+        grain('shatter', snapped ? 0.62 : 0.24, 0.3, 0.012, snapped ? 0.9 : 0.78, 0, 0.85, o);
+        under = 0.32;
+      }
+      const t = ctx.currentTime, k = Math.min(7, 1 + count + (snapped ? 2 : 0));
+      for (let i = 0; i < k; i++) {
+        const at = t + i * (0.008 + Math.random() * 0.028), dur = 0.006 + Math.random() * 0.012;
+        const src = ctx.createBufferSource(), hp = ctx.createBiquadFilter(), g = ctx.createGain();
+        src.buffer = noiseBuf; hp.type = 'highpass'; hp.frequency.value = 2200 + Math.random() * 3800;
+        g.gain.setValueAtTime(under * (snapped ? 0.34 : 0.2) * (0.6 + Math.random() * 0.6), at); g.gain.exponentialRampToValueAtTime(0.001, at + dur);
+        src.connect(hp).connect(g).connect(ctx.destination); src.start(at, Math.random() * 1.8, dur + 0.01);
+      }
+      cracks += k;
+    },
+    get cracks() { return cracks; },
+    set kit(v) { kit = v; }, get samples() { return Object.keys(bufs); },
+    fizzOpen() {                        // 捏碎的那一下放气：很快冲到最响，然后在五秒左右里收干净
+      if (!on || !ctx || !bufs.fizz) return;
+      const t = ctx.currentTime; if (t - lastOpen < 0.2) return; lastOpen = t;
+      if (!fizzOut) { fizzOut = fizzGain = ctx.createGain(); fizzOut.connect(ctx.destination); }
+      fizzOut.gain.value = 1;
+      const src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = bufs.fizz; src.loop = true;
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(5.6, t + 0.04); g.gain.setTargetAtTime(0, t + 0.06, 1.05);
+      src.connect(g).connect(fizzOut); src.start(t, Math.random() * 4); src.stop(t + 5.2);
+    },
+    fizz(rate, dt, open) {                    // 很多又短又尖的小气泡
+      if (!on || !ctx) return;
+      let k = Math.min(260, rate * 0.45) * dt; k = Math.floor(k) + (Math.random() < k % 1 ? 1 : 0);          // 原来那一片细密的冒泡声（和开气的“呲”叠在一起）
+      for (let i = 0; i < k; i++) bubble(ctx.currentTime + Math.random() * dt, 2200 + Math.random() * 5200, 0.003 + Math.random() * 0.007, 0.018 + Math.random() * 0.03, 0.15);
+      let g = Math.min(26, rate * 0.04) * dt; g = Math.floor(g) + (Math.random() < g % 1 ? 1 : 0);          // 夹着一些大泡“咕噜”
+      for (let i = 0; i < g; i++) bubble(ctx.currentTime + Math.random() * dt, 500 + Math.random() * 900, 0.012 + Math.random() * 0.02, 0.1 + Math.random() * 0.1, 0.6);
+    },
+    crunch(act, dt) {                   // 动得越厉害，碎响越密
+      if (!on || !ctx) return;
+      let k = Math.min(120, Math.max(0, act - 0.02) * 110) * dt; k = Math.floor(k) + (Math.random() < k % 1 ? 1 : 0);
+      for (let i = 0; i < k; i++) this.crack(0, false);
+    },
+    get _dbg() { return { ctx, wet }; },
+    press() { init(); ctx.resume(); pressAt = ctx.currentTime; },          // 硅胶：按下去不出声，只有手指离开的时候响一下
+    release() {                         // 很短的一声；按得越久越响——快速点一下只有很轻的一声，按住半秒以上才是完整的音量
+      if (!ctx) return;
+      const k = Math.min(1, (ctx.currentTime - pressAt) / 0.55), v = 0.12 + 0.88 * k * k;
+      if (!grain('squish', 0.34 * v, 0, 0, 1.05 + Math.random() * 0.2, 0.1)) blip(210, 420, 0.12 * v, 0.07);
+    },
+    update(act) {      // 形变越剧烈，“咕叽”声越大
+      if (!ctx || !on) return;
+      const t = ctx.currentTime;
+      squish.gain.setTargetAtTime(0, t, 0.04);          // 揉动时那层持续的“沙沙”声去掉了，只留按下、松开的挤压声
+      filter.frequency.setTargetAtTime(380 + Math.min(act, 3) * 420, t, 0.05);
+    },
+  };
+})();
+
+// 浏览器要等用户碰一下页面才允许出声，而且启动音频要一点时间。以前是第一次捏的时候才启动，那一下常常就没声音。
+// 现在：只要碰到页面（在首页点卡片的那一下就算），立刻启动；切回这个标签页时也重新唤醒一次。
+// 手机上切去别的 app 再回来，系统会把这个页面的音频掐掉，而且常常是“看起来还在运行、其实已经没声音了”，光叫它继续是叫不醒的。
+// 所以：只要页面被切到后台过，回来后第一次碰屏幕就把音频整个重建一遍。
+let audioStale = false;
+document.addEventListener('visibilitychange', () => { if (document.hidden) audioStale = true; });
+addEventListener('pagehide', () => { audioStale = true; }); addEventListener('blur', () => { if (coarse) audioStale = true; });
+for (const ev of ['pointerdown', 'touchend', 'click', 'keydown']) addEventListener(ev, () => {
+  if (audioStale && sfx.started) { audioStale = false; sfx.revive(); } else sfx.wake();
+}, { capture: true, passive: true });
+
+// 手机上长按不要弹出选字的框、放大镜或者长按菜单：这是个捏东西的页面，没有任何需要选中的文字
+for (const ev of ['contextmenu', 'selectstart', 'dragstart']) document.addEventListener(ev, e => e.preventDefault());
+canvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+
+// 干净画面（录屏用）：点标题进入，点左上角退出
+document.getElementById('toyTitle').addEventListener('click', () => document.body.classList.add('clean'));
+document.getElementById('cleanExit').addEventListener('click', () => document.body.classList.remove('clean'));
+
+/* ───────────────────────── 主循环 ───────────────────────── */
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.fov = w < h ? 46 : 34;         // 竖屏拉宽视角，保证小熊完整入镜
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+
+let last = performance.now();
+let playing = false;
+function frame(now) {
+  if (!playing) { last = now; requestAnimationFrame(frame); return; }      // 在首页时不模拟、不渲染
+  const dt = Math.min((now - last) / 1000, 1 / 30); last = now;
+  if (!window.__manual) advance(dt);        // __manual：自动测试时由脚本自己一步步推进，不受浏览器给后台标签页降速的影响
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+function advance(dt) {
+  if (dt > 0) {
+    let deepest = 0;
+    for (const f of fingers) {          // 按得越久陷得越深
+      f.depth += (f.maxDepth - f.depth) * (1 - Math.exp(-f.rate * dt));
+      aim(f);
+      if (f.depth > deepest) deepest = f.depth;
+    }
+    if (TOYS[toyName].fluid) {
+      slimeAcc += dt;                       // 流体用固定步长
+      let k = 0;
+      while (slimeAcc >= SL.dt && k < 3) { slimeStep(); slimeAcc -= SL.dt; k++; }
+      if (k === 3) slimeAcc = 0;
+      slimeSurface();
+    } else {
+      const h = dt / SUBSTEPS;
+      for (let s = 0; s < SUBSTEPS; s++) substep(h);
+      faceU.faceMix.value += ((deepest > 0.12 ? 1 : 0) - faceU.faceMix.value) * (1 - Math.exp(-14 * dt));
+      syncMesh();
+      if (TOYS[toyName].wax) { kneadUpdate(dt, activity); waxUpdate(dt); }
+      if (TOYS[toyName].beads) beadsUpdate();
+      if (TOYS[toyName].fizz) fizzUpdate(dt);
+      if (TOYS[toyName].soap) soapUpdate(dt);
+      if (TOYS[toyName].bag) bagUpdate();
+      if (TOYS[toyName].yolk) yolkUpdate(dt);
+    }
+    for (const f of fingers) f.mesh.position.copy(f.c);
+    const snd = TOYS[toyName].sound;
+    if (TOYS[toyName].fluid || snd === 'gel') sfx.slimeMove(activity, dt, fingers.some(f => f.depth < f.maxDepth * 0.97));       // 胶感：按进去不响，抬手、回弹的时候咕叽
+    else if (snd === 'crisp') { sfx.update(0); sfx.crunch(activity * 5 + (fingers.some(f => f.depth < f.maxDepth * 0.985) ? 0.85 : 0), dt); }      // 手指还在往里走的时候，珠子一直在互相挤                                                     // 酥脆：珠子被挤开的一串细碎的“咔”
+    else if (snd === 'sponge') { sfx.update(0); sfx.fizz(Math.min(520, activity * 2600), dt); sfx.crunch(activity * 0.5, dt); }
+    else if (snd === 'fizz') { sfx.update(0); sfx.fizz(FIZZ.rate, dt, FIZZ.gas > 0); }                                                        // 碳酸：一片细密的“嘶嘶”冒泡声
+    else sfx.update(TOYS[toyName].wax ? 0 : activity);
+  }
+}
+/* ───────────────────────── 史莱姆：粘弹性流体粒子 ─────────────────────────
+   整团都是粒子（不只是表面一层），做法来自 Clavet 等人的 viscoelastic fluid：
+   · 双密度松弛：保持体积不可压，同时让粒子互相吸住（表面张力，所以会抱成团）
+   · 粒子间的“弹簧键”：小形变时有弹性；形变超过屈服量，键的原长就跟着变（塑性）——
+     所以揉成什么样就停在什么样；键被拉得太长就断（扯断），粒子重新靠近又会连上（融合）
+   · 表面用 Marching Cubes 从粒子密度场里实时提取                                     */
+const SL = {
+  n: 0, MAX: 2400, dt: 1 / 120, h: 0.286, space: 0.13,
+  rho0: 4.3, k: 0.006, kNear: 0.012,          // 压强 / 近程压强（已含 dt²，直接是位移量级）
+  spring: 0.12, yieldR: 0.12, plast: 8,       // 键的刚度、屈服比例、塑性流动速度
+  visc: 0.08, drag: 1.0, gravity: 12,
+  rad: 0.055, stick: 0.75, trayR: 2.15,        // 粒子半径、桌面粘性、托盘边界
+  top: 4.4,
+};
+const MAXB = 32;
+const sp = new Float32Array(SL.MAX * 3), spPrev = new Float32Array(SL.MAX * 3), sv = new Float32Array(SL.MAX * 3);
+const sRho = new Float32Array(SL.MAX), sRhoN = new Float32Array(SL.MAX);
+const bondJ = new Int32Array(SL.MAX * MAXB), bondL = new Float32Array(SL.MAX * MAXB);
+const PAIR_MAX = 120000;
+const pairI = new Int32Array(PAIR_MAX), pairJ = new Int32Array(PAIR_MAX), pairW = new Float32Array(PAIR_MAX);
+const pairX = new Float32Array(PAIR_MAX), pairY = new Float32Array(PAIR_MAX), pairZ = new Float32Array(PAIR_MAX);
+let pairN = 0, slimeAcc = 0;
+const GN = 22, gridO = -GN * SL.h / 2;        // 空间哈希网格（边长 = 作用半径 h）
+const cellStart = new Int32Array(GN * GN * GN + 1), cellOf = new Int32Array(SL.MAX), sorted = new Int32Array(SL.MAX);
+
+const FLUIDS = {
+  slime: { spring: 0.12, yieldR: 0.12, plast: 8, visc: 0.08, drag: 1.0, gravity: 12, stick: 0.75, body: 0, coh: 1, mcR: 0.33, mcIso: 3.0,
+           color: 0x86e3d2, transmission: 0.35, atten: 0x4fd2b8 },
+  cream: { spring: 0.07, yieldR: 0.1, plast: 6, visc: 0.14, drag: 1.6, gravity: 9, stick: 0.7, body: 0.075, coh: 0.9, mcR: 0.33, mcIso: 2.6,      // 奶油：稠、不透明、挤出来是一坨，慢慢才塌
+           color: 0xffdca0, transmission: 0, atten: 0xffdca0, rough: 0.42, coat: 0.25 },
+  yolk:  { spring: 0, yieldR: 0.12, plast: 12, visc: 0.018, drag: 0.15, gravity: 12, stick: 0.12, body: 0.075, coh: 0.12, mcR: 0.27, mcIso: 2.0,     // 很稀的浆：几乎没有“键”，会流
+           color: 0xffa51f, transmission: 0.22, atten: 0xff8a00 },
+};
+function fluidProfile(name) {
+  const f = FLUIDS[name];
+  Object.assign(SL, { spring: f.spring, yieldR: f.yieldR, plast: f.plast, visc: f.visc, drag: f.drag, gravity: f.gravity, stick: f.stick, body: f.body, coh: f.coh });
+  MCG.R = f.mcR; MCG.iso = f.mcIso;
+  slimeMat.color.set(f.color); slimeMat.transmission = coarse ? 0 : f.transmission; slimeMat.attenuationColor.set(f.atten); slimeMat.roughness = f.rough ?? 0.07; slimeMat.clearcoat = f.coat ?? 1; slimeMat.needsUpdate = true;
+}
+// 方向 → 那个方向上的黏土顶点（让流出来的浆贴着捏捏的表面往下淌，而不是穿进去）
+const DG = 20, dirGrid = new Int32Array(6 * DG * DG); let dirGridReady = false;
+function cubeCell(x, y, z, G) {
+  const ax = Math.abs(x), ay = Math.abs(y), az = Math.abs(z); let f, u, v;
+  if (ax >= ay && ax >= az) { f = x > 0 ? 0 : 1; u = y / ax; v = z / ax; }
+  else if (ay >= az) { f = y > 0 ? 2 : 3; u = x / ay; v = z / ay; }
+  else { f = z > 0 ? 4 : 5; u = x / az; v = y / az; }
+  return (f * G + Math.min(G - 1, ((v + 1) * 0.5 * G) | 0)) * G + Math.min(G - 1, ((u + 1) * 0.5 * G) | 0);
+}
+function dirGridBuild() {
+  if (dirGridReady) return; dirGridReady = true;
+  const best = new Float32Array(6 * DG * DG).fill(-2);
+  for (let f = 0; f < 6; f++) for (let iv = 0; iv < DG; iv++) for (let iu = 0; iu < DG; iu++) {
+    const u = (iu + 0.5) / DG * 2 - 1, v = (iv + 0.5) / DG * 2 - 1, sgn = f % 2 ? -1 : 1;
+    let x, y, z; if (f < 2) { x = sgn; y = u; z = v; } else if (f < 4) { y = sgn; x = u; z = v; } else { z = sgn; x = u; y = v; }
+    const l = Math.hypot(x, y, z), c = (f * DG + iv) * DG + iu; x /= l; y /= l; z /= l;
+    for (let i = 0; i < N; i++) { const d = x * dirs[i*3] + y * dirs[i*3+1] + z * dirs[i*3+2]; if (d > best[c]) { best[c] = d; dirGrid[c] = i; } }
+  }
+}
+const slimeMat = new THREE.MeshPhysicalMaterial({
+  color: 0x86e3d2, roughness: 0.07, clearcoat: 1, clearcoatRoughness: 0.03,
+  transmission: 0.35, thickness: 0.9, ior: 1.35, attenuationColor: new THREE.Color(0x4fd2b8), attenuationDistance: 1.4,
+});
+// 表面网格：只在粒子包围盒里建密度场，再用 Marching Cubes 提取等值面
+const MCG = { c: coarse ? 0.11 : 0.085, R: 0.33, iso: 3.0, MX: 80, MY: 64, MZ: 80, MAXV: 36000 * 3 };
+const mcField = new Float32Array(MCG.MX * MCG.MY * MCG.MZ);
+const mcPos = new Float32Array(MCG.MAXV * 3), mcNrm = new Float32Array(MCG.MAXV * 3);
+const mcV = new Float32Array(36), mcN = new Float32Array(36);       // 当前立方体 12 条棱上的顶点 / 法线
+const slimeGeo = new THREE.BufferGeometry();
+slimeGeo.setAttribute('position', new THREE.BufferAttribute(mcPos, 3).setUsage(THREE.DynamicDrawUsage));
+slimeGeo.setAttribute('normal', new THREE.BufferAttribute(mcNrm, 3).setUsage(THREE.DynamicDrawUsage));
+slimeGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 1, 0), 6);
+const slimeMesh = new THREE.Mesh(slimeGeo, slimeMat);
+slimeMesh.castShadow = true; slimeMesh.receiveShadow = true; slimeMesh.frustumCulled = false; slimeMesh.visible = false;
+scene.add(slimeMesh);
+
+function slimeReset() {            // 在托盘中央堆一坨半椭球形的史莱姆
+  let n = 0, seed = 11;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647 - 0.5, s = SL.space;
+  for (let y = 0.07; y < 0.85; y += s) for (let x = -1.3; x <= 1.3; x += s) for (let z = -1.2; z <= 1.2; z += s) {
+    if ((x / 1.3) ** 2 + (y / 0.8) ** 2 + (z / 1.2) ** 2 > 1 || n >= SL.MAX) continue;
+    sp[n*3] = x + rnd() * s * 0.3; sp[n*3+1] = y + rnd() * s * 0.2; sp[n*3+2] = z + rnd() * s * 0.3; n++;
+  }
+  SL.n = n; spPrev.set(sp); sv.fill(0); bondJ.fill(-1); slimeAcc = 0;
+}
+
+function slimePairs() {            // 计数排序建网格，再列出所有距离 < h 的粒子对
+  const n = SL.n, h = SL.h, ih = 1 / h, G2 = GN * GN;
+  cellStart.fill(0);
+  for (let i = 0; i < n; i++) {
+    const cx = Math.min(GN - 1, Math.max(0, ((sp[i*3] - gridO) * ih) | 0));
+    const cy = Math.min(GN - 1, Math.max(0, (sp[i*3+1] * ih) | 0));
+    const cz = Math.min(GN - 1, Math.max(0, ((sp[i*3+2] - gridO) * ih) | 0));
+    const c = cx + cy * GN + cz * G2; cellOf[i] = c; cellStart[c + 1]++;
+  }
+  for (let c = 0; c < GN * G2; c++) cellStart[c + 1] += cellStart[c];
+  const fill = slimePairs.fill || (slimePairs.fill = new Int32Array(GN * G2));
+  fill.set(cellStart.subarray(0, GN * G2));
+  for (let i = 0; i < n; i++) sorted[fill[cellOf[i]]++] = i;
+  pairN = 0; const h2 = h * h;
+  for (let i = 0; i < n; i++) {
+    const c = cellOf[i], cx = c % GN, cy = ((c / GN) | 0) % GN, cz = (c / G2) | 0;
+    const x = sp[i*3], y = sp[i*3+1], z = sp[i*3+2];
+    for (let dz = -1; dz <= 1; dz++) { const z2 = cz + dz; if (z2 < 0 || z2 >= GN) continue;
+      for (let dy = -1; dy <= 1; dy++) { const y2 = cy + dy; if (y2 < 0 || y2 >= GN) continue;
+        for (let dx = -1; dx <= 1; dx++) { const x2 = cx + dx; if (x2 < 0 || x2 >= GN) continue;
+          const cc = x2 + y2 * GN + z2 * G2;
+          for (let k = cellStart[cc], e = cellStart[cc + 1]; k < e; k++) {
+            const j = sorted[k]; if (j <= i) continue;
+            const ex = sp[j*3] - x, ey = sp[j*3+1] - y, ez = sp[j*3+2] - z;
+            if (ex*ex + ey*ey + ez*ez < h2 && pairN < PAIR_MAX) { pairI[pairN] = i; pairJ[pairN] = j; pairN++; }
+          }
+        } } }
+  }
+}
+
+function slimeStep() {
+  const n = SL.n, n3 = n * 3, dt = SL.dt, h = SL.h, ih = 1 / h;
+  for (const f of fingers) {       // 手指限速靠近目标
+    const dx = f.target.x - f.c.x, dy = f.target.y - f.c.y, dz = f.target.z - f.c.z;
+    const d = Math.hypot(dx, dy, dz), m = FINGER_SPEED * dt, s = d > m ? m / d : 1;
+    f.c.x += dx * s; f.c.y += dy * s; f.c.z += dz * s;
+  }
+  const fresh = (SL.tick = (SL.tick | 0) + 1) & 1;     // 邻居表隔一步重建一次（两步之间粒子几乎不动）
+  if (fresh) slimePairs();
+
+  // 1) 重力 + 粘性（相邻粒子的速度互相拉平，越黏越像一整团在动）
+  const g = SL.gravity * dt;
+  for (let i = 1; i < n3; i += 3) sv[i] -= g;
+  for (let p = 0; p < pairN; p++) {
+    const i = pairI[p] * 3, j = pairJ[p] * 3;
+    const ex = sp[j] - sp[i], ey = sp[j+1] - sp[i+1], ez = sp[j+2] - sp[i+2];
+    const w = SL.visc * (1 - Math.sqrt(ex*ex + ey*ey + ez*ez) * ih);
+    const ax = (sv[j] - sv[i]) * w, ay = (sv[j+1] - sv[i+1]) * w, az = (sv[j+2] - sv[i+2]) * w;
+    sv[i] += ax; sv[i+1] += ay; sv[i+2] += az; sv[j] -= ax; sv[j+1] -= ay; sv[j+2] -= az;
+  }
+  // 2) 预测位置
+  for (let i = 0; i < n3; i++) { spPrev[i] = sp[i]; sp[i] += sv[i] * dt; }
+
+  // 3) 弹簧键：靠近的粒子对连上键；屈服后原长改变（塑性）；拉过头就断
+  if (fresh) for (let p = 0; p < pairN; p++) {
+    const i = pairI[p], j = pairJ[p], b = i * MAXB;
+    let free = -1, found = false;
+    for (let s = 0; s < MAXB; s++) { const t = bondJ[b + s]; if (t === j) { found = true; break; } if (t < 0 && free < 0) free = s; }
+    if (!found && free >= 0) { bondJ[b + free] = j; bondL[b + free] = h; }
+  }
+  const ks = SL.spring, yr = SL.yieldR, pl = SL.plast * dt;
+  for (let i = 0; i < n; i++) for (let s = 0, b = i * MAXB; s < MAXB; s++) {
+    const j = bondJ[b + s]; if (j < 0) continue;
+    const i3 = i * 3, j3 = j * 3;
+    const ex = sp[j3] - sp[i3], ey = sp[j3+1] - sp[i3+1], ez = sp[j3+2] - sp[i3+2];
+    const r = Math.sqrt(ex*ex + ey*ey + ez*ez) + 1e-9;
+    let L = bondL[b + s]; const tol = yr * L;
+    if (r > L + tol) L += pl * (r - L - tol); else if (r < L - tol) L -= pl * (L - tol - r);
+    if (L > h) { bondJ[b + s] = -1; continue; }
+    bondL[b + s] = L;
+    const D = ks * (1 - L * ih) * (L - r) * 0.5 / r;
+    sp[i3] -= ex * D; sp[i3+1] -= ey * D; sp[i3+2] -= ez * D; sp[j3] += ex * D; sp[j3+1] += ey * D; sp[j3+2] += ez * D;
+  }
+
+  // 4) 双密度松弛：不可压 + 内聚
+  sRho.fill(0, 0, n); sRhoN.fill(0, 0, n);
+  for (let p = 0; p < pairN; p++) {
+    const i = pairI[p], j = pairJ[p];
+    const ex = sp[j*3] - sp[i*3], ey = sp[j*3+1] - sp[i*3+1], ez = sp[j*3+2] - sp[i*3+2];
+    const r = Math.sqrt(ex*ex + ey*ey + ez*ez) + 1e-9, w = 1 - r * ih;
+    if (w <= 0) { pairW[p] = 0; continue; }
+    pairW[p] = w; pairX[p] = ex / r; pairY[p] = ey / r; pairZ[p] = ez / r;
+    const w2 = w * w; sRho[i] += w2; sRho[j] += w2; sRhoN[i] += w2 * w; sRhoN[j] += w2 * w;
+  }
+  const k = SL.k, kn = SL.kNear, r0 = SL.rho0, coh = SL.coh;
+  for (let p = 0; p < pairN; p++) {
+    const w = pairW[p]; if (w <= 0) continue;
+    const i = pairI[p], j = pairJ[p];
+    let pr = (sRho[i] + sRho[j] - 2 * r0) * 0.5; if (pr < 0) pr *= coh;       // 负压 = 互相吸住（抱团）；稀的浆吸得弱，会摊平
+    const D = (k * pr * w + kn * (sRhoN[i] + sRhoN[j]) * 0.5 * w * w) * 0.5;
+    const dx = pairX[p] * D, dy = pairY[p] * D, dz = pairZ[p] * D;
+    sp[i*3] -= dx; sp[i*3+1] -= dy; sp[i*3+2] -= dz; sp[j*3] += dx; sp[j*3+1] += dy; sp[j*3+2] += dz;
+  }
+
+  // 5) 碰撞：手指 / 平板 / 桌面（粘）/ 托盘边
+  const rad = SL.rad, keep = 1 - SL.stick, tr = SL.trayR, top = SL.top, nf = fingers.length;
+  for (let i = 0; i < n3; i += 3) {
+    for (let fi = 0; fi < nf; fi++) {
+      const f = fingers[fi], c = f.c, dx = sp[i] - c.x, dy = sp[i+1] - c.y, dz = sp[i+2] - c.z;
+      if (f.plate) {
+        const al = dx * f.ax + dy * f.ay + dz * f.az - rad;
+        if (al < 0) { sp[i] -= al * f.ax; sp[i+1] -= al * f.ay; sp[i+2] -= al * f.az; }
+        continue;
+      }
+      // 胶囊：指尖球 + 朝手的方向延伸的指身，粒子被推到最近的表面外（流体会绕着手指流开）
+      const bx = f.pinch ? f.bx : -f.ax, by = f.pinch ? f.by : -f.ay, bz = f.pinch ? f.bz : -f.az;
+      const t = Math.max(0, dx * bx + dy * by + dz * bz);
+      const qx = dx - t * bx, qy = dy - t * by, qz = dz - t * bz, R = f.r + rad;
+      const d2 = qx*qx + qy*qy + qz*qz;
+      if (d2 < R * R && d2 > 1e-10) { const m = R / Math.sqrt(d2) - 1; sp[i] += qx * m; sp[i+1] += qy * m; sp[i+2] += qz * m; }
+    }
+    if (SL.body) {                 // 浆不能钻进捏捏里：沿着从中心出发的方向，推到黏土表面（再加蜡壳的厚度）之外
+      const dx = sp[i], dy = sp[i+1] - restCY, dz = sp[i+2], dl = Math.sqrt(dx*dx + dy*dy + dz*dz) || 1e-6;
+      const v = dirGrid[cubeCell(dx / dl, dy / dl, dz / dl, DG)] * 3, vy = pos[v+1] - restCY;
+      const rs = Math.sqrt(pos[v]*pos[v] + vy*vy + pos[v+2]*pos[v+2]) + SL.body;
+      if (dl < rs) {               // 每步最多往外挪一点点：表面是估出来的，一步到位的话浆会被“弹”飞
+        const m = (dl + Math.min(rs - dl, 0.012)) / dl; sp[i] = dx * m; sp[i+1] = restCY + dy * m; sp[i+2] = dz * m;
+      }
+    }
+    if (sp[i+1] < rad) {
+      sp[i+1] = rad;
+      sp[i] = spPrev[i] + (sp[i] - spPrev[i]) * keep; sp[i+2] = spPrev[i+2] + (sp[i+2] - spPrev[i+2]) * keep;
+    } else if (sp[i+1] > top) sp[i+1] = top;
+    const rr = sp[i] * sp[i] + sp[i+2] * sp[i+2];
+    if (rr > tr * tr) { const m = tr / Math.sqrt(rr); sp[i] *= m; sp[i+2] *= m; }
+  }
+  // 5.5) 捏紧后，指尖周围的那一小团被捏住，跟着手指走（拎起来、拉丝、扯断）
+  for (const f of fingers) {
+    if (!f.grip) continue;
+    const c = f.c;
+    if (!f.heldS && f.depth > f.maxDepth * 0.85) {
+      const idx = [], off = [], R = f.r + 0.15;
+      for (let i = 0; i < n3; i += 3) {
+        const dx = sp[i] - c.x, dy = sp[i+1] - c.y, dz = sp[i+2] - c.z;
+        if (dx*dx + dy*dy + dz*dz < R * R) { idx.push(i); off.push(dx, dy, dz); }
+      }
+      f.heldS = { idx, off };
+    }
+    if (f.heldS) for (let j = 0, { idx, off } = f.heldS; j < idx.length; j++) {
+      const i = idx[j]; sp[i] = c.x + off[j*3]; sp[i+1] = Math.max(rad, c.y + off[j*3+1]); sp[i+2] = c.z + off[j*3+2];
+    }
+  }
+  // 6) 由位置反推速度
+  const idt = 1 / dt, kd = Math.exp(-SL.drag * dt); let act = 0;
+  if (SL.body) {                                          // 蛋黄浆限速：每一步最多挪这么远，只会淌，不会被弹飞
+    const lim = 3.6 * dt;
+    for (let i = 0; i < n3; i++) { const d = sp[i] - spPrev[i]; if (d > lim) sp[i] = spPrev[i] + lim; else if (d < -lim) sp[i] = spPrev[i] - lim; }
+  }
+  for (let i = 0; i < n3; i++) { const v = (sp[i] - spPrev[i]) * idt * kd; sv[i] = v; act += v * v; }
+  activity = Math.sqrt(act / n) * 0.8;
+}
+
+function slimeSurface() {
+  if (!SL.n) { slimeGeo.setDrawRange(0, 0); return; }
+  const n3 = SL.n * 3, c = MCG.c, ic = 1 / c, R = MCG.R, R2 = R * R, iR2 = 1 / R2, iso = MCG.iso, F = mcField;
+  // 包围盒 → 网格尺寸
+  let x0 = 1e9, y0 = 1e9, z0 = 1e9, x1 = -1e9, y1 = -1e9, z1 = -1e9;
+  for (let i = 0; i < n3; i += 3) {
+    const x = sp[i], y = sp[i+1], z = sp[i+2];
+    if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; if (z < z0) z0 = z; if (z > z1) z1 = z;
+  }
+  const pad = R + c; x0 -= pad; y0 -= pad; z0 -= pad;
+  const nx = Math.min(MCG.MX, Math.ceil((x1 + pad - x0) * ic) + 1), ny = Math.min(MCG.MY, Math.ceil((y1 + pad - y0) * ic) + 1),
+        nz = Math.min(MCG.MZ, Math.ceil((z1 + pad - z0) * ic) + 1), nxy = nx * ny;
+  F.fill(0, 0, nxy * nz);
+  // 每个粒子往周围格点上“洒”一个光滑的密度核
+  const rc = R * ic;
+  for (let i = 0; i < n3; i += 3) {
+    const gx = (sp[i] - x0) * ic, gy = (sp[i+1] - y0) * ic, gz = (sp[i+2] - z0) * ic;
+    const ax = Math.max(0, Math.ceil(gx - rc)), bx = Math.min(nx - 1, Math.floor(gx + rc));
+    const ay = Math.max(0, Math.ceil(gy - rc)), by = Math.min(ny - 1, Math.floor(gy + rc));
+    const az = Math.max(0, Math.ceil(gz - rc)), bz = Math.min(nz - 1, Math.floor(gz + rc));
+    for (let iz = az; iz <= bz; iz++) { const dz = (iz - gz) * c, dz2 = dz * dz;
+      for (let iy = ay; iy <= by; iy++) { const dy = (iy - gy) * c, d2 = dz2 + dy * dy; if (d2 >= R2) continue;
+        let q = ax + iy * nx + iz * nxy;
+        for (let ix = ax; ix <= bx; ix++, q++) { const dx = (ix - gx) * c, dd = d2 + dx * dx; if (dd < R2) { const t = 1 - dd * iR2; F[q] += t * t * t; } }
+      } }
+  }
+  // 一条棱上的等值点：位置线性插值，法线 = 两端密度梯度的插值（指向密度减小的方向）
+  const edge = (slot, ix, iy, iz, jx, jy, jz) => {
+    const qa = ix + iy * nx + iz * nxy, qb = jx + jy * nx + jz * nxy, fa = F[qa], fb = F[qb];
+    const mu = (iso - fa) / (fb - fa), o = slot * 3;
+    mcV[o] = x0 + (ix + (jx - ix) * mu) * c; mcV[o+1] = y0 + (iy + (jy - iy) * mu) * c; mcV[o+2] = z0 + (iz + (jz - iz) * mu) * c;
+    const gax = F[ix > 0 ? qa - 1 : qa] - F[ix < nx - 1 ? qa + 1 : qa], gay = F[iy > 0 ? qa - nx : qa] - F[iy < ny - 1 ? qa + nx : qa], gaz = F[iz > 0 ? qa - nxy : qa] - F[iz < nz - 1 ? qa + nxy : qa];
+    const gbx = F[jx > 0 ? qb - 1 : qb] - F[jx < nx - 1 ? qb + 1 : qb], gby = F[jy > 0 ? qb - nx : qb] - F[jy < ny - 1 ? qb + nx : qb], gbz = F[jz > 0 ? qb - nxy : qb] - F[jz < nz - 1 ? qb + nxy : qb];
+    const mx = gax + (gbx - gax) * mu, my = gay + (gby - gay) * mu, mz = gaz + (gbz - gaz) * mu, l = 1 / (Math.sqrt(mx*mx + my*my + mz*mz) || 1);
+    mcN[o] = mx * l; mcN[o+1] = my * l; mcN[o+2] = mz * l;
+  };
+  let v = 0; const maxF = MCG.MAXV * 3 - 9;
+  for (let iz = 0; iz < nz - 1; iz++) for (let iy = 0; iy < ny - 1; iy++) {
+    let q = iy * nx + iz * nxy;
+    for (let ix = 0; ix < nx - 1; ix++, q++) {
+      let ci = 0;
+      if (F[q] < iso) ci |= 1; if (F[q + 1] < iso) ci |= 2; if (F[q + nx] < iso) ci |= 8; if (F[q + 1 + nx] < iso) ci |= 4;
+      if (F[q + nxy] < iso) ci |= 16; if (F[q + 1 + nxy] < iso) ci |= 32; if (F[q + nx + nxy] < iso) ci |= 128; if (F[q + 1 + nx + nxy] < iso) ci |= 64;
+      const bits = edgeTable[ci]; if (!bits) continue;
+      const jx = ix + 1, jy = iy + 1, jz = iz + 1;
+      if (bits & 1) edge(0, ix, iy, iz, jx, iy, iz);     if (bits & 2) edge(1, jx, iy, iz, jx, jy, iz);
+      if (bits & 4) edge(2, ix, jy, iz, jx, jy, iz);     if (bits & 8) edge(3, ix, iy, iz, ix, jy, iz);
+      if (bits & 16) edge(4, ix, iy, jz, jx, iy, jz);    if (bits & 32) edge(5, jx, iy, jz, jx, jy, jz);
+      if (bits & 64) edge(6, ix, jy, jz, jx, jy, jz);    if (bits & 128) edge(7, ix, iy, jz, ix, jy, jz);
+      if (bits & 256) edge(8, ix, iy, iz, ix, iy, jz);   if (bits & 512) edge(9, jx, iy, iz, jx, iy, jz);
+      if (bits & 1024) edge(10, jx, jy, iz, jx, jy, jz); if (bits & 2048) edge(11, ix, jy, iz, ix, jy, jz);
+      for (let t = ci * 16; triTable[t] !== -1 && v < maxF; t += 3) {
+        for (let k = 0; k < 3; k++, v += 3) {
+          const o = triTable[t + k] * 3;
+          mcPos[v] = mcV[o]; mcPos[v+1] = mcV[o+1]; mcPos[v+2] = mcV[o+2]; mcNrm[v] = mcN[o]; mcNrm[v+1] = mcN[o+1]; mcNrm[v+2] = mcN[o+2];
+        }
+      }
+    }
+  }
+  for (const a of [slimeGeo.attributes.position, slimeGeo.attributes.normal]) { a.clearUpdateRanges(); a.addUpdateRange(0, v); a.needsUpdate = true; }
+  slimeGeo.setDrawRange(0, v / 3);
+  SL.tris = v / 9;
+}
+
+function slimePick(ray) {          // 射线打到的第一个粒子；法线取“命中点背离附近粒子重心”的方向
+  const o = ray.origin, d = ray.direction, pr = 0.12; let best = Infinity;
+  for (let i = 0, n3 = SL.n * 3; i < n3; i += 3) {
+    const ox = sp[i] - o.x, oy = sp[i+1] - o.y, oz = sp[i+2] - o.z;
+    const tc = ox * d.x + oy * d.y + oz * d.z, d2 = ox*ox + oy*oy + oz*oz - tc * tc;
+    if (d2 < pr * pr) { const t = tc - Math.sqrt(pr * pr - d2); if (t > 0 && t < best) best = t; }
+  }
+  if (best === Infinity) return null;
+  const point = ray.at(best, new THREE.Vector3()), normal = new THREE.Vector3(); let cnt = 0;
+  for (let i = 0, n3 = SL.n * 3; i < n3; i += 3) {
+    const dx = sp[i] - point.x, dy = sp[i+1] - point.y, dz = sp[i+2] - point.z;
+    if (dx*dx + dy*dy + dz*dz < 0.2) { normal.x -= dx; normal.y -= dy; normal.z -= dz; cnt++; }
+  }
+  if (normal.lengthSq() < 1e-4 * cnt * cnt) normal.set(0, 1, 0);
+  return { distance: best, point, normal: normal.normalize() };
+}
+
+/* ───────────────────────── 脆皮捏捏：黏土芯 + 一层会碎的蜡壳 ─────────────────────────
+   蜡壳被预先分成 150 块碎片（球面上的 Voronoi）。每块有三种状态：完好 → 裂了（边缘出现裂纹）→ 掉了（露出黏土）。
+   哪块该裂、该掉，看它底下的黏土相对最初形状被捏变形了多少。掉下来的碎片变成一片小蜡片落到托盘上。 */
+function crispShape(x, y, z) {
+  x *= 1.08; y *= 0.88; z *= 1.02;
+  const t = y + 0.52;                                  // 底部压平
+  y = -0.52 + 0.625 * t + 0.375 * Math.sqrt(t * t + 0.015);
+  return [x, y, z];
+}
+function makeClayTex() {            // 黏土：纯色加一点颗粒
+  const S = 512, cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d');
+  g.fillStyle = '#ff8fa6'; g.fillRect(0, 0, S, S);
+  let seed = 5; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let k = 0; k < 5000; k++) {
+    g.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,.07)' : 'rgba(150,40,70,.06)';
+    g.beginPath(); g.arc(rnd() * S, rnd() * S, 1 + rnd() * 2.5, 0, 7); g.fill();
+  }
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  return tex;
+}
+// 碎片是两级的：约 28 块“大板”，每块大板里又分成大小不一的小碎片（共 230 块左右）。
+// 受力不大的地方只沿大板的边界裂开、整块松动；手指正下方受力很大，小碎片之间也裂开，碎成小渣掉下来。
+// 所以离受力点越近碎得越小，越远掉下来的块越大——和真的脆壳一样。
+const WAX = { n: 0, max: 236, plates: 28, crackAt: 0.07, shatterAt: 0.17 };
+const waxSeed = new Float32Array(WAX.max * 3), waxSt = new Uint8Array(256 * 4), vertShard = new Uint8Array(N), shardPlate = new Uint8Array(WAX.max);
+const shardDev = new Float32Array(WAX.max), shardPrev = new Float32Array(WAX.max); let grind = 0, devMax = 0, devMaxV = 0, volScale = 1;
+let waxReady = false, near1 = 0, near2 = 0, nearGap = 0;
+const WG = 12, WK = 32, waxCell = new Int16Array(6 * WG * WG * WK);
+function waxCellOf(x, y, z) {        // 方向 → 立方体面上的格子编号
+  const ax = Math.abs(x), ay = Math.abs(y), az = Math.abs(z); let f, u, v;
+  if (ax >= ay && ax >= az) { f = x > 0 ? 0 : 1; u = y / ax; v = z / ax; }
+  else if (ay >= az) { f = y > 0 ? 2 : 3; u = x / ay; v = z / ay; }
+  else { f = z > 0 ? 4 : 5; u = x / az; v = y / az; }
+  const iu = Math.min(WG - 1, ((u + 1) * 0.5 * WG) | 0), iv = Math.min(WG - 1, ((v + 1) * 0.5 * WG) | 0);
+  return (f * WG + iv) * WG + iu;
+}
+function waxBuildCells() {
+  const dots = new Float32Array(WAX.n), order = Array.from({ length: WAX.n }, (_, k) => k);
+  for (let f = 0; f < 6; f++) for (let iv = 0; iv < WG; iv++) for (let iu = 0; iu < WG; iu++) {
+    const u = (iu + 0.5) / WG * 2 - 1, v = (iv + 0.5) / WG * 2 - 1, sgn = f % 2 ? -1 : 1;
+    let x, y, z;
+    if (f < 2) { x = sgn; y = u; z = v; } else if (f < 4) { y = sgn; x = u; z = v; } else { z = sgn; x = u; y = v; }
+    const l = Math.hypot(x, y, z); x /= l; y /= l; z /= l;
+    for (let k = 0; k < WAX.n; k++) dots[k] = x * waxSeed[k*3] + y * waxSeed[k*3+1] + z * waxSeed[k*3+2];
+    order.sort((a, b) => dots[b] - dots[a]);
+    const o = ((f * WG + iv) * WG + iu) * WK;
+    for (let k = 0; k < WK; k++) waxCell[o + k] = order[k];
+  }
+}
+function waxNearest(x, y, z) {       // 最近 / 次近的碎片，以及两者的夹角差（= 离交界多远）
+  let b1 = -2, b2 = -2, i1 = 0, i2 = 0;
+  for (let c = waxCellOf(x, y, z) * WK, e = c + WK; c < e; c++) {
+    const k = waxCell[c], d = x * waxSeed[k*3] + y * waxSeed[k*3+1] + z * waxSeed[k*3+2];
+    if (d > b1) { b2 = b1; i2 = i1; b1 = d; i1 = k; } else if (d > b2) { b2 = d; i2 = k; }
+  }
+  near1 = i1; near2 = i2; nearGap = Math.acos(Math.min(1, b2)) - Math.acos(Math.min(1, b1));
+}
+function waxInit() {
+  if (waxReady) return; waxReady = true;
+  let seed = 3; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const rdir = () => { let x, y, z, l; do { x = rnd() * 2 - 1; y = rnd() * 2 - 1; z = rnd() * 2 - 1; l = x*x + y*y + z*z; } while (l > 1 || l < 1e-4); l = Math.sqrt(l); return [x / l, y / l, z / l]; };
+  // 小碎片：随机撒点，但每个位置允许的最小间距不一样（有的地方碎片密而小，有的地方疏而大）
+  const lobes = Array.from({ length: 5 }, rdir);
+  for (let tries = 0; WAX.n < WAX.max && tries < 30000; tries++) {
+    const [x, y, z] = rdir();
+    let dens = 0; for (const l of lobes) dens += Math.max(0, x * l[0] + y * l[1] + z * l[2]) ** 2;
+    const minAng = 0.085 + 0.2 * Math.min(1, dens * 0.7) * (0.5 + rnd());
+    const c = Math.cos(minAng); let ok = true;
+    for (let k = 0; k < WAX.n && ok; k++) if (x * waxSeed[k*3] + y * waxSeed[k*3+1] + z * waxSeed[k*3+2] > c) ok = false;
+    if (ok) { waxSeed[WAX.n*3] = x; waxSeed[WAX.n*3+1] = y; waxSeed[WAX.n*3+2] = z; WAX.n++; }
+  }
+  // 大板：每块小碎片归到离它最近的大板中心
+  const plates = Array.from({ length: WAX.plates }, rdir);
+  for (let k = 0; k < WAX.n; k++) {
+    let best = -2; for (let pl = 0; pl < plates.length; pl++) { const d = waxSeed[k*3] * plates[pl][0] + waxSeed[k*3+1] * plates[pl][1] + waxSeed[k*3+2] * plates[pl][2]; if (d > best) { best = d; shardPlate[k] = pl; } }
+  }
+  waxBuildCells();
+  for (let i = 0; i < N; i++) { waxNearest(dirs[i*3], dirs[i*3+1], dirs[i*3+2]); vertShard[i] = near1; }
+}
+
+/* 蜡壳是一层真正有厚度的模型，不是画在黏土上的：
+   每块碎片是一块立体的蜡板（顶面 + 一圈侧壁），顶面比黏土高出 SHELL.t。
+   · 完好时：蜡板的每个顶点跟着它正下方的黏土走，整层壳是连续的；
+   · 裂了：同一块大板上的碎片作为一个刚体，跟着大板中心处的黏土平移、倾斜；
+   · 碎了：每块小碎片各自是一个刚体，跟着自己中心处的黏土平移、倾斜。
+   蜡板是硬的、黏土是软的，所以黏土一变形，相邻蜡板之间就真的错开、翘起、露出缝，从侧面能看到蜡的厚度。 */
+const SHELL = { t: 0.055, sink: 0.03, rings: 3, seg: 0.085 };
+const shellMat = new THREE.MeshPhysicalMaterial({ vertexColors: true, color: 0xfffaf5, roughness: 0.3, clearcoat: 0.55, clearcoatRoughness: 0.3,
+  transmission: 0.12, thickness: 0.1, ior: 1.44 });   // 白色、微微透出底下的黏土
+if (coarse) shellMat.transmission = 0;
+const shell = new THREE.Mesh(new THREE.BufferGeometry(), shellMat);
+shell.castShadow = true; shell.receiveShadow = true; shell.frustumCulled = false; shell.visible = false; scene.add(shell);
+// 手机上半透明的蜡壳用的是普通的透明混合。每块蜡片是一块有侧壁的立体板，透明混合会把板和板之间的侧壁也画出来，
+// 看上去就是一道道分界线。办法：先把整层壳“只写深度、不上颜色”地画一遍，再正式画的时候就只剩最外面那一层表面，侧壁被挡掉。
+const shellDepth = new THREE.Mesh(shell.geometry, new THREE.MeshBasicMaterial({ colorWrite: false, transparent: true }));
+shellDepth.frustumCulled = false; shellDepth.visible = false; shellDepth.renderOrder = -0.2; scene.add(shellDepth);
+let SD = null;                       // 蜡壳的数据：每个顶点的静止位置 / 法线 / 绑在哪个黏土顶点上，每块碎片的顶点范围和锚点
+function shellBuild(toy) {
+  if (toy.sd) { SD = toy.sd; shell.geometry = shellDepth.geometry = toy.shellGeo; return; }
+  const T = toy.shellT || SHELL.t;      // 这只的蜡有多厚
+  const lists = Array.from({ length: WAX.n }, () => []);
+  for (let i = 0; i < N; i++) lists[vertShard[i]].push(i);
+  const nearClay = (x, y, z, a, b) => {            // 在这两块碎片底下的黏土顶点里找最近的
+    let best = -2, bi = 0;
+    for (const L of a === b ? [lists[a]] : [lists[a], lists[b]]) for (const i of L) { const d = x * dirs[i*3] + y * dirs[i*3+1] + z * dirs[i*3+2]; if (d > best) { best = d; bi = i; } }
+    return bi;
+  };
+  const clip = (poly, A, B, C) => {               // 保留 A·a + B·b + C ≥ 0 的那一半
+    const out = [];
+    for (let i = 0; i < poly.length; i++) {
+      const p = poly[i], q = poly[(i + 1) % poly.length], fp = A * p[0] + B * p[1] + C, fq = A * q[0] + B * q[1] + C;
+      if (fp >= 0) out.push(p);
+      if ((fp >= 0) !== (fq >= 0)) { const t = fp / (fp - fq); out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]); }
+    }
+    return out;
+  };
+  const P = [], NR = [], NS = [], BIND = [], IDX = [], range = new Int32Array(WAX.n * 2), anchor = new Int32Array(WAX.n), plateAnchor = new Int32Array(WAX.plates);
+  for (let s = 0; s < WAX.n; s++) {
+    const cx = waxSeed[s*3], cy = waxSeed[s*3+1], cz = waxSeed[s*3+2];
+    // 碎片中心处的切平面坐标系 (u, v)，u × v = 朝外
+    let hx = Math.abs(cy) < 0.9 ? 0 : 1, hy = Math.abs(cy) < 0.9 ? 1 : 0;
+    let ux = cy * 0 - cz * hy, uy = cz * hx - cx * 0, uz = cx * hy - cy * hx; let l = Math.hypot(ux, uy, uz); ux /= l; uy /= l; uz /= l;
+    const vx = cy * uz - cz * uy, vy = cz * ux - cx * uz, vz = cx * uy - cy * ux;
+    // 这块碎片的轮廓 = 它和所有邻居的“中垂线”围出来的凸多边形（在切平面上，中垂线都是直线）
+    let poly = [[-1.5, -1.5], [1.5, -1.5], [1.5, 1.5], [-1.5, 1.5]];
+    for (let k = 0; k < WAX.n && poly.length; k++) {
+      if (k === s) continue;
+      const kx = waxSeed[k*3], ky = waxSeed[k*3+1], kz = waxSeed[k*3+2];
+      if (cx * kx + cy * ky + cz * kz < 0.2) continue;
+      const mx = cx - kx, my = cy - ky, mz = cz - kz;
+      poly = clip(poly, ux * mx + uy * my + uz * mz, vx * mx + vy * my + vz * mz, cx * mx + cy * my + cz * mz);
+    }
+    const B = [];                                 // 轮廓上的点（长边再细分，顶面才能贴着弧面）
+    for (let i = 0; i < poly.length; i++) {
+      const p = poly[i], q = poly[(i + 1) % poly.length], n = Math.max(1, Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / SHELL.seg));
+      for (let j = 0; j < n; j++) B.push([p[0] + (q[0] - p[0]) * j / n, p[1] + (q[1] - p[1]) * j / n]);
+    }
+    const M = B.length, start = P.length / 3;
+    const add = (a, b, h, wall) => {
+      let dx = cx + a * ux + b * vx, dy = cy + a * uy + b * vy, dz = cz + a * uz + b * vz; const dl = Math.hypot(dx, dy, dz); dx /= dl; dy /= dl; dz /= dl;
+      waxNearest(dx, dy, dz);
+      const bi = nearClay(dx, dy, dz, s, near1 === s ? near2 : near1), cp = restShape(dx, dy, dz);
+      // 这个方向上外形的法线：往两个切向各挪一点点，叉乘
+      let t1x = dy * 0 - dz * 1, t1y = dz * 0 - dx * 0, t1z = dx * 1 - dy * 0;          // d × (0,1,0)
+      if (t1x*t1x + t1y*t1y + t1z*t1z < 0.01) { t1x = 0; t1y = -dz; t1z = dy; }          // d 接近竖直时改用 d × (1,0,0)
+      const t1l = Math.hypot(t1x, t1y, t1z); t1x /= t1l; t1y /= t1l; t1z /= t1l;
+      const t2x = dy * t1z - dz * t1y, t2y = dz * t1x - dx * t1z, t2z = dx * t1y - dy * t1x, e = 0.012;
+      const unit = (x, y, z) => { const l = Math.hypot(x, y, z); return restShape(x / l, y / l, z / l); };
+      const pa = unit(dx + t1x * e, dy + t1y * e, dz + t1z * e), pb = unit(dx + t2x * e, dy + t2y * e, dz + t2z * e);
+      const ax = pa[0] - cp[0], ay = pa[1] - cp[1], az = pa[2] - cp[2], bx = pb[0] - cp[0], by = pb[1] - cp[1], bz = pb[2] - cp[2];
+      let nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx; const nl = Math.hypot(nx, ny, nz) || 1;
+      const sgn = 1; nx *= sgn / nl; ny *= sgn / nl; nz *= sgn / nl;
+      P.push(cp[0] + nx * h, cp[1] - restMinY + ny * h, cp[2] + nz * h); BIND.push(bi); NS.push(nx, ny, nz);
+      if (!wall) { NR.push(nx, ny, nz); return; }
+      let wx = a * ux + b * vx, wy = a * uy + b * vy, wz = a * uz + b * vz; const d = wx * nx + wy * ny + wz * nz;   // 侧壁的法线：沿表面朝碎片外
+      wx -= d * nx; wy -= d * ny; wz -= d * nz; const wl = Math.hypot(wx, wy, wz) || 1; NR.push(wx / wl, wy / wl, wz / wl);
+    };
+    add(0, 0, T, false);                                              // 顶面：中心
+    for (let r = 1; r <= SHELL.rings; r++) for (let i = 0; i < M; i++) add(B[i][0] * r / SHELL.rings, B[i][1] * r / SHELL.rings, T, false);   // 顶面：一圈圈往外
+    for (let i = 0; i < M; i++) add(B[i][0], B[i][1], T, true);       // 侧壁：上沿
+    for (let i = 0; i < M; i++) add(B[i][0], B[i][1], -SHELL.sink, true);   // 侧壁：下沿（埋进黏土一点）
+    const ring = r => start + 1 + (r - 1) * M, wt = start + 1 + SHELL.rings * M, wb = wt + M;
+    for (let i = 0; i < M; i++) {
+      const j = (i + 1) % M;
+      IDX.push(start, ring(1) + i, ring(1) + j);
+      for (let r = 1; r < SHELL.rings; r++) IDX.push(ring(r) + i, ring(r + 1) + i, ring(r + 1) + j, ring(r) + i, ring(r + 1) + j, ring(r) + j);
+      IDX.push(wt + i, wb + i, wb + j, wt + i, wb + j, wt + j);
+    }
+    range[s*2] = start; range[s*2+1] = P.length / 3;
+    anchor[s] = nearClay(cx, cy, cz, s, s);
+  }
+  for (let pl = 0; pl < WAX.plates; pl++) {       // 大板的锚点：板上所有碎片中心的平均方向下面的那个黏土顶点
+    let x = 0, y = 0, z = 0;
+    for (let s = 0; s < WAX.n; s++) if (shardPlate[s] === pl) { x += waxSeed[s*3]; y += waxSeed[s*3+1]; z += waxSeed[s*3+2]; }
+    let best = -2; for (let i = 0; i < N; i++) { const d = x * dirs[i*3] + y * dirs[i*3+1] + z * dirs[i*3+2]; if (d > best) { best = d; plateAnchor[pl] = i; } }
+  }
+  const nv = P.length / 3, g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(nv * 3), 3).setUsage(THREE.DynamicDrawUsage));
+  g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nv * 3), 3).setUsage(THREE.DynamicDrawUsage));
+  g.setIndex(new THREE.BufferAttribute(new Uint32Array(IDX), 1));
+  const COL = new Float32Array(nv * 3).fill(1);      // 顶点颜色：默认全白（= 只用蜡壳本身的颜色）；有渐变的（芒果）按静止位置上色
+  if (toy.shellGrad) for (let i = 0; i < nv; i++) { const c = toy.shellGrad(P[i*3], P[i*3+1], P[i*3+2]); COL[i*3] = c[0]; COL[i*3+1] = c[1]; COL[i*3+2] = c[2]; }
+  g.setAttribute('color', new THREE.BufferAttribute(COL, 3));
+  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.8, 0), 4);
+  toy.sd = SD = { nv, rest: new Float32Array(P), nrest: new Float32Array(NR), nsurf: new Float32Array(NS), bind: new Int32Array(BIND), range, anchor, plateAnchor };
+  toy.shellGeo = shell.geometry = shellDepth.geometry = g;
+}
+function shellUpdate() {
+  const { rest, nrest, nsurf, bind, range, anchor } = SD, P = shell.geometry.attributes.position.array, NO = shell.geometry.attributes.normal.array;
+  const PL = shellUpdate.pl || (shellUpdate.pl = new Float32Array(WAX.plates * 13));    // 每块板：数量、静止位置、当前位置、静止法线、当前法线 的累加
+  PL.fill(0);
+  for (let s = 0; s < WAX.n; s++) if (waxSt[s*4] === 128) {
+    const a = anchor[s] * 3, o = shardPlate[s] * 13;
+    PL[o]++;
+    for (let k = 0; k < 3; k++) { PL[o+1+k] += home[a+k]; PL[o+4+k] += pos[a+k]; PL[o+7+k] += restN[a+k]; PL[o+10+k] += nrm[a+k]; }
+  }
+  for (let s = 0; s < WAX.n; s++) {
+    const st = waxSt[s*4], i0 = range[s*2], i1 = range[s*2+1];
+    if (st === 1) { for (let i = i0 * 3; i < i1 * 3; i++) P[i] = 0; continue; }     // 破口上的蜡片：没了（缩成一个点，不画）
+    if (st === 0) {                                // 完好：每个顶点跟着正下方的黏土
+      for (let i = i0; i < i1; i++) {
+        const b = bind[i] * 3, o = i * 3;
+        P[o] = pos[b] + rest[o] - home[b]; P[o+1] = pos[b+1] + rest[o+1] - home[b+1]; P[o+2] = pos[b+2] + rest[o+2] - home[b+2];
+        NO[o] = nsurf[o]; NO[o+1] = nsurf[o+1]; NO[o+2] = nsurf[o+2];      // 完好的时候侧壁也用表面的法线：板和板的接缝处明暗一致，就看不出一道道线
+      }
+      if (shellDepth.visible) {                  // 手机上的半透明壳：完好的蜡片不画侧壁（把侧壁压成一条线）。不然侧壁的上沿和顶面的边重合，同一处被混合两次，就是那一道道分界线
+        const M = (i1 - i0 - 1) / (SHELL.rings + 2), wt = (i0 + 1 + SHELL.rings * M) * 3, wb = wt + M * 3;
+        for (let i = 0; i < M * 3; i++) P[wb + i] = P[wt + i];
+      }
+      continue;
+    }
+    // 裂了 / 碎了：整块作为刚体，跟着锚点处的黏土平移，并按那里法线的变化倾斜
+    let hx, hy, hz, px, py, pz, ax, ay, az, bx, by, bz;      // 静止锚点、当前锚点、静止法线、当前法线
+    if (st === 255) {
+      const a = anchor[s] * 3;
+      hx = home[a]; hy = home[a+1]; hz = home[a+2]; px = pos[a]; py = pos[a+1]; pz = pos[a+2];
+      ax = restN[a]; ay = restN[a+1]; az = restN[a+2]; bx = nrm[a]; by = nrm[a+1]; bz = nrm[a+2];
+    } else {
+      const o = shardPlate[s] * 13, c = 1 / PL[o];
+      hx = PL[o+1] * c; hy = PL[o+2] * c; hz = PL[o+3] * c; px = PL[o+4] * c; py = PL[o+5] * c; pz = PL[o+6] * c;
+      let l = 1 / (Math.hypot(PL[o+7], PL[o+8], PL[o+9]) || 1); ax = PL[o+7] * l; ay = PL[o+8] * l; az = PL[o+9] * l;
+      l = 1 / (Math.hypot(PL[o+10], PL[o+11], PL[o+12]) || 1); bx = PL[o+10] * l; by = PL[o+11] * l; bz = PL[o+12] * l;
+    }
+    let kx = ay * bz - az * by, ky = az * bx - ax * bz, kz = ax * by - ay * bx;      // 转轴 = 旧法线 × 新法线
+    const sn = Math.hypot(kx, ky, kz), cs = ax * bx + ay * by + az * bz;
+    if (sn > 1e-6) { kx /= sn; ky /= sn; kz /= sn; }
+    for (let i = i0; i < i1; i++) {
+      const o = i * 3;
+      for (let pass = 0; pass < 2; pass++) {       // 先转位置，再转法线（罗德里格斯公式）
+        const vx = pass ? nrest[o] : rest[o] - hx, vy = pass ? nrest[o+1] : rest[o+1] - hy, vz = pass ? nrest[o+2] : rest[o+2] - hz;
+        const kd = (kx * vx + ky * vy + kz * vz) * (1 - cs);
+        const rx = vx * cs + (ky * vz - kz * vy) * sn + kx * kd, ry = vy * cs + (kz * vx - kx * vz) * sn + ky * kd, rz = vz * cs + (kx * vy - ky * vx) * sn + kz * kd;
+        if (pass) { NO[o] = rx; NO[o+1] = ry; NO[o+2] = rz; } else { P[o] = px + rx; P[o+1] = py + ry; P[o+2] = pz + rz; }
+      }
+    }
+  }
+  shell.geometry.attributes.position.needsUpdate = true; shell.geometry.attributes.normal.needsUpdate = true;
+}
+// 从第一次按下去的地方往外裂：第一下按在哪，就以那里为中心把壳重新分块——中心一小圈、外面一环一环，每环再切成几瓣；
+// 裂缝从中心往外一圈圈扩出去，按得越久扩得越远。
+const WR = { p: null, A: 0, ang: new Float32Array(WAX.max), orig: null };
+function waxRadial(px, py, pz) {
+  let ux = py * 0 - pz * 1, uy = pz * 0 - px * 0, uz = px * 1 - py * 0;           // p × (0,1,0)
+  if (ux*ux + uy*uy + uz*uz < 0.01) { ux = 0; uy = -pz; uz = py; }
+  const ul = Math.hypot(ux, uy, uz); ux /= ul; uy /= ul; uz /= ul;
+  const vx = py * uz - pz * uy, vy = pz * ux - px * uz, vz = px * uy - py * ux;
+  const rings = [0.38, 0.8, 1.35, 2.05, 3.2], secs = [3, 5, 7, 7, 5], base = [0, 3, 8, 15, 22];
+  for (let k = 0; k < WAX.n; k++) {
+    const x = waxSeed[k*3], y = waxSeed[k*3+1], z = waxSeed[k*3+2], a = Math.acos(Math.max(-1, Math.min(1, x * px + y * py + z * pz)));
+    let r = 0; while (a > rings[r]) r++;
+    const ph = Math.atan2(x * vx + y * vy + z * vz, x * ux + y * uy + z * uz) / 6.2832 + r * 0.37, fr = ph - Math.floor(ph);
+    WR.ang[k] = a; shardPlate[k] = base[r] + Math.min(secs[r] - 1, (fr * secs[r]) | 0);
+  }
+  WR.p = [px, py, pz]; WR.A = 0.4;
+}
+// 蜡壳怎么分块，默认是全身随机撒点的那一套；个别捏捏（多层脆皮）要自己指定每块蜡片在哪、哪几块算一大块。
+// 当前用的那一套放在 waxSeed / vertShard / shardPlate / waxCell 里，换玩具的时候整套换掉。
+const WSET = { def: null };
+const waxSnap = () => ({ n: WAX.n, seed: waxSeed.slice(), vs: vertShard.slice(), pl: shardPlate.slice(), cell: waxCell.slice() });
+function waxUse(w) { WAX.n = w.n; waxSeed.set(w.seed); vertShard.set(w.vs); shardPlate.set(w.pl); waxCell.set(w.cell); }
+function waxCustom({ S, P }) {
+  WAX.n = S.length;
+  for (let k = 0; k < S.length; k++) { waxSeed[k*3] = S[k][0]; waxSeed[k*3+1] = S[k][1]; waxSeed[k*3+2] = S[k][2]; shardPlate[k] = P[k]; }
+  waxBuildCells();
+  for (let i = 0; i < N; i++) { waxNearest(dirs[i*3], dirs[i*3+1], dirs[i*3+2]); vertShard[i] = near1; }
+  return waxSnap();
+}
+function waxReset() {
+  waxInit(); if (!WSET.def) WSET.def = waxSnap();
+  waxUse(TOYS[toyName].waxSeeds ? (TOYS[toyName].wset ||= waxCustom(TOYS[toyName].waxSeeds())) : WSET.def); WR.p = null; WR.A = 0;
+  shellBuild(TOYS[toyName]); shellMat.color.set(TOYS[toyName].shellColor || 0xfffaf5);
+  const clear = TOYS[toyName].clear || 0;
+  if (coarse) { shellMat.transmission = clear; shellMat.roughness = clear ? 0.34 : 0.3; }      // 手机：半透明的壳也用和电脑一样的磨砂透光（不透明的壳不开，省一遍渲染）
+  else { shellMat.transmission = clear || 0.12; shellMat.roughness = clear ? 0.34 : 0.3; }
+  shellMat.needsUpdate = true;
+  for (let k = 0; k < 256; k++) { waxSt[k*4] = 0; waxSt[k*4+3] = 255; }
+  const bare = TOYS[toyName].bare;
+  if (bare) for (let k = 0; k < WAX.n; k++) if (bare(waxSeed[k*3], waxSeed[k*3+1], waxSeed[k*3+2])) waxSt[k*4] = 1;
+  shardPrev.fill(0); grind = 0;
+  shellUpdate();
+}
+function waxUpdate(dt) {
+  // 每块碎片底下的黏土相对最初形状变形了多少（取这块里变形最大的顶点）
+  let cx = 0, cy = 0, cz = 0;
+  for (let i = 0; i < N * 3; i += 3) { cx += pos[i]; cy += pos[i+1]; cz += pos[i+2]; }
+  cx /= N; cy /= N; cz /= N;
+  if (feel.fixed) { cx = 0; cy = restCY; cz = 0; }
+  shardDev.fill(0); devMax = 0;
+  for (let i = 0, k = 0; k < N; i += 3, k++) {
+    const s = vertShard[k], dx = pos[i] - cx - q0[i], dy = pos[i+1] - cy - q0[i+1], dz = pos[i+2] - cz - q0[i+2];
+    const d = Math.sqrt(dx*dx + dy*dy + dz*dz); if (d > shardDev[s]) shardDev[s] = d;
+    if (d > devMax) { devMax = d; devMaxV = k; }
+  }
+  let cracked = 0, shattered = 0;
+  const radial = TOYS[toyName].radial, crk0 = TOYS[toyName].crackAt || WAX.crackAt;
+  if (radial && !WR.p && devMax > crk0) waxRadial(dirs[devMaxV*3], dirs[devMaxV*3+1], dirs[devMaxV*3+2]);            // 第一下：定下裂纹的中心
+  else if (radial && WR.p && fingers.length && devMax > crk0) WR.A = Math.min(3.2, WR.A + dt * 0.5);                    // 一直按着：裂纹继续往外扩
+  const plHit = new Uint8Array(WAX.plates), crackAt = TOYS[toyName].crackAt || WAX.crackAt, shatterAt = TOYS[toyName].shatterAt || WAX.shatterAt;
+  for (let s = 0; s < WAX.n; s++) {
+    const d = shardDev[s]; let st = waxSt[s*4];
+    if (st === 255) grind += Math.abs(d - shardPrev[s]);          // 已经碎了的蜡片底下的黏土还在动 → 碎蜡互相挤、摩擦
+    shardPrev[s] = d;
+    if (st === 0 && (d > crackAt || (radial && WR.p && WR.ang[s] < WR.A))) { st = 128; cracked++; plHit[shardPlate[s]] = 1; }
+    if (st === 128 && d > shatterAt) { st = 255; shattered++; }       // 受力最大的地方：小碎片之间也裂开
+    waxSt[s*4] = st;
+  }
+  for (let s = 0; s < WAX.n; s++) {  // 裂缝沿着大板的边界一路传开：板上任何一处裂了，整块板就从壳上松开
+    if (waxSt[s*4] === 0 && plHit[shardPlate[s]] && !(radial && WR.p && WR.ang[s] > WR.A + 0.55)) { waxSt[s*4] = 128; cracked++; }
+  }
+  const down = fingers.length > 0;          // 只有手指按在上面（往下按）的时候才出声；松手以后泥回弹、碎蜡挪动都不响
+  if (cracked || shattered) { if (down) sfx.crack(cracked + shattered, shattered > 0); }
+  else if (grind > 1.8) { if (down) sfx.crack(1, false); grind = 0; }      // 没有新裂的：碎蜡被挤动累积到一定量，响一下
+  if (cracked || shattered) grind = 0;
+  shellUpdate();
+}
+
+/* ───────────────────────── 汉堡捏捏：半透明蜡壳，里面是一只分层的黏土汉堡 ─────────────────────────
+   按“纬度”分层（s = 方向的 y 分量）：底面包 → 肉饼 → 芝士 → 生菜 → 顶面包。外形和贴图用同一套分界。 */
+const BURGER = { bun0: -0.5, patty: -0.24, cheese: -0.12, lettuce: 0.08 };
+function burgerShape(x, y, z) {
+  const s = y, az = Math.atan2(x, z), P = 2.6;
+  const h = Math.pow(Math.max(0, 1 - Math.pow(Math.abs(s), P)), 1 / P);      // 比球更“方”一点：侧面接近竖直
+  const hl = Math.hypot(x, z) || 1, b = (c, w) => Math.exp(-((s - c) / w) * ((s - c) / w));
+  const lt = b(-0.02, 0.075);
+  const m = 1 + 0.05 * b(-0.37, 0.11) + 0.05 * b(-0.18, 0.05) + (0.06 + 0.03 * Math.sin(az * 9)) * lt
+              - 0.035 * b(-0.5, 0.05) - 0.03 * b(0.12, 0.05);
+  const R = 1.12 * h * m;
+  let Y = (s > 0 ? 0.8 : 0.82) * s + 0.03 * Math.sin(az * 9 + 1.3) * lt;      // 生菜边上下起伏
+  const t = Y + 0.62;                                                       // 底部压平
+  Y = -0.62 + 0.625 * t + 0.375 * Math.sqrt(t * t + 0.012);
+  return [x / hl * R, Y, z / hl * R];
+}
+function makeBurgerTex() {
+  const S = 1024, cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d');
+  const img = g.createImageData(S, S), D = img.data;
+  let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const bunLo = [236, 186, 110], bunHi = [205, 128, 52], bunPale = [246, 214, 150];
+  const patty = [104, 56, 34], cheese = [255, 200, 40], lettuce = [122, 196, 66], lettuceD = [78, 160, 50];
+  for (let py = 0; py < S; py++) for (let px = 0; px < S; px++) {
+    const u = (px + 0.5) / S - 0.5, v = 0.5 - (py + 0.5) / S, r = Math.hypot(u, v) || 1e-6;
+    const th = Math.min(Math.PI, r * 2 * Math.PI), sn = Math.sin(th);
+    const dx = u / r * sn, dy = v / r * sn, dz = Math.cos(th);              // 这个像素对应的静止方向
+    const s = dy, az = Math.atan2(dx, dz);
+    let c;
+    const q4 = az / (Math.PI / 2), fr = Math.abs(q4 - Math.floor(q4) - 0.5);
+    const drip = Math.max(0, 1 - fr / 0.2);                                  // 芝士四个角垂下来
+    const cheeseLo = BURGER.patty - 0.17 * drip;
+    const lettuceLo = BURGER.cheese + 0.03 * Math.sin(az * 9 + 0.6) + 0.015 * Math.sin(az * 23);
+    if (s > BURGER.lettuce) c = mix(mix(bunPale, bunLo, sm(BURGER.lettuce, BURGER.lettuce + 0.12, s)), bunHi, sm(0.2, 0.75, s));
+    else if (s > lettuceLo) c = mix(lettuceD, lettuce, 0.5 + 0.5 * Math.sin(az * 9 + s * 30));
+    else if (s > cheeseLo) c = cheese;
+    else if (s > BURGER.bun0) { const k = 0.82 + 0.3 * rnd(); c = [patty[0] * k, patty[1] * k, patty[2] * k]; }
+    else c = mix(bunHi, bunLo, sm(-0.55, -0.8, s));
+    const n = 0.97 + 0.06 * rnd(), o = (py * S + px) * 4;
+    D[o] = Math.min(255, c[0] * n); D[o+1] = Math.min(255, c[1] * n); D[o+2] = Math.min(255, c[2] * n); D[o+3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  // 顶面包上的白芝麻
+  g.fillStyle = '#fff3d6';
+  for (let k = 0; k < 70; k++) {
+    const sy = 0.38 + 0.6 * rnd(), a = rnd() * Math.PI * 2, hh = Math.sqrt(1 - sy * sy);
+    const dx = hh * Math.sin(a), dz = hh * Math.cos(a), th = Math.acos(dz), rl = Math.hypot(dx, sy) || 1;
+    if (th > 2.6) continue;                                                  // 背面正中投影变形太大，不画
+    const u = 0.5 + dx / rl * th * 0.15915494, v = 0.5 + sy / rl * th * 0.15915494;
+    g.save(); g.translate(u * S, (1 - v) * S); g.rotate(rnd() * Math.PI);
+    g.beginPath(); g.ellipse(0, 0, 7, 3.6, 0, 0, 7); g.fill(); g.restore();
+  }
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  return tex;
+}
+
+/* ───────────────────────── 薯条捏捏：一盒薯条 ─────────────────────────
+   球面分三段：底（s < -0.6）→ 红色纸盒的侧面 → 顶上的盖（s > 0.3），盖上按位置顶出 12 根薯条。
+   返回值前三个是位置，后两个给贴图用：哪一段、以及（盖上）是不是在薯条上。 */
+const FRIES = [];
+{ const hb = [0.62, 0.78, 0.66, 0.8, 0.7, 0.58], hf = [0.4, 0.5, 0.36, 0.52, 0.44, 0.38];
+  for (let i = 0; i < 6; i++) { FRIES.push([-0.625 + 0.25 * i, -0.19, hb[i]]); FRIES.push([-0.625 + 0.25 * i, 0.19, hf[i]]); } }
+function friesShape(x, y, z) {
+  const s = y, hl = Math.hypot(x, z) || 1, K = 0.88; let cx = x / hl, cz = z / hl;
+  const k = 1 / (Math.pow(Math.pow(Math.abs(cx), 4) + Math.pow(Math.abs(cz), 4), 0.25) || 1); cx *= k; cz *= k;     // 圆角方形的截面
+  if (s < -0.6) { const r = Math.sqrt((s + 1) / 0.4); return [cx * r * 0.62 * K, 0, cz * r * 0.36 * K, 0, 0]; }
+  if (s < 0.3) { const t = (s + 0.6) / 0.9; return [cx * (0.62 + 0.2 * t) * K, t * K, cz * (0.36 + 0.06 * t) * K, 1, t]; }
+  const r = Math.sqrt((1 - s) / 0.7), X = cx * r * 0.82, Z = cz * r * 0.42;
+  let h = 0, m = 0;
+  for (const f of FRIES) {
+    const e = Math.min((0.105 - Math.abs(X - f[0])) / 0.035, (0.15 - Math.abs(Z - f[1])) / 0.035);
+    if (e > 0) { const w = e >= 1 ? 1 : e * e * (3 - 2 * e); if (w * f[2] > h) h = w * f[2]; if (w > m) m = w; }
+  }
+  const ed = Math.min(1, (1 - r) / 0.1), edge = ed * ed * (3 - 2 * ed);
+  return [X * K, (1 + (0.04 + h) * edge) * K, Z * K, 2, m];
+}
+function makeFriesTex() {
+  const S = 1024, cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d');
+  const img = g.createImageData(S, S), D = img.data;
+  let seed = 23; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let py = 0; py < S; py++) for (let px = 0; px < S; px++) {
+    const u = (px + 0.5) / S - 0.5, v = 0.5 - (py + 0.5) / S, r = Math.hypot(u, v) || 1e-6;
+    const th = Math.min(Math.PI, r * 2 * Math.PI), sn = Math.sin(th);
+    const q = friesShape(u / r * sn, v / r * sn, Math.cos(th));
+    let c;
+    if (q[3] === 2) { const m = q[4]; c = [190 + 65 * m, 128 + 84 * m, 36 + 56 * m]; }       // 薯条金黄，缝里深一点
+    else if (q[3] === 1 && q[4] > 0.56 && q[4] < 0.7) c = [255, 244, 232];                    // 纸盒上一道白边
+    else c = [228, 52, 44];
+    const n = 0.97 + 0.06 * rnd(), o = (py * S + px) * 4;
+    D[o] = Math.min(255, c[0] * n); D[o+1] = Math.min(255, c[1] * n); D[o+2] = Math.min(255, c[2] * n); D[o+3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  return tex;
+}
+
+/* ───────────────────────── 甜甜圈捏捏 ─────────────────────────
+   黏土是一张没有洞的皮，所以中间不是真的穿孔，而是一个很深的坑（坑底贴着托盘，从上面看就是洞）。
+   纬度 u 从底到顶：底面 → 绕着面圈的截面圆转一大圈（外侧 → 顶 → 洞壁）→ 坑底。 */
+const DONUT = { a: 0.42, Rc: 0.72, u0: 0.1, u1: 0.9, A: Math.PI * 1.5 + 0.6 };
+function donutAlpha(u) { return -Math.PI / 2 + (u - DONUT.u0) / (DONUT.u1 - DONUT.u0) * DONUT.A; }
+function donutShape(x, y, z) {
+  const { a, Rc, u0, u1 } = DONUT, u = (y + 1) / 2, hl = Math.hypot(x, z) || 1, az = Math.atan2(x, z);
+  let r, Y;
+  if (u < u0) { r = Rc * Math.sqrt(u / u0); Y = 0; }
+  else if (u < u1) { const al = donutAlpha(u); r = Rc + a * Math.cos(al); Y = a + a * Math.sin(al); }
+  else { const al = donutAlpha(u1), t = (1 - u) / (1 - u1); r = (Rc + a * Math.cos(al)) * Math.sqrt(t); Y = 0.15 + (a + a * Math.sin(al) - 0.15) * t; }
+  r *= 1 + 0.02 * Math.sin(az * 3 + 0.7);                                  // 不那么正圆
+  return [x / hl * r, Y * 0.92, z / hl * r];
+}
+function makeDonutTex() {
+  const S = 1024, cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d');
+  const img = g.createImageData(S, S), D = img.data;
+  let seed = 31; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let py = 0; py < S; py++) for (let px = 0; px < S; px++) {
+    const u = (px + 0.5) / S - 0.5, v = 0.5 - (py + 0.5) / S, r = Math.hypot(u, v) || 1e-6;
+    const th = Math.min(Math.PI, r * 2 * Math.PI), sn = Math.sin(th);
+    const dx = u / r * sn, dy = v / r * sn, dz = Math.cos(th), az = Math.atan2(dx, dz), lu = (dy + 1) / 2, al = donutAlpha(lu);
+    const lo = 0.1 + 0.24 * Math.sin(az * 5) + 0.1 * Math.sin(az * 11 + 1), hi = Math.PI + 0.3 + 0.1 * Math.sin(az * 7);     // 糖霜往外侧流下来的边
+    let c;
+    if (lu >= DONUT.u0 && lu < DONUT.u1 && al > lo && al < hi) c = [255, 138, 178];          // 草莓糖霜
+    else if (lu >= DONUT.u1) c = [196, 140, 78];                                             // 坑底
+    else { const t = Math.min(1, Math.abs(al) / 1.2); c = [236 - 22 * t, 184 - 30 * t, 112 - 26 * t]; }   // 面圈，腰上一圈浅色
+    const n = 0.97 + 0.06 * rnd(), o = (py * S + px) * 4;
+    D[o] = Math.min(255, c[0] * n); D[o+1] = Math.min(255, c[1] * n); D[o+2] = Math.min(255, c[2] * n); D[o+3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  // 彩色糖针
+  const cols = ['#ffffff', '#ffe14d', '#6fd3ff', '#8be07a', '#b98bff', '#ff5f6d'];
+  for (let k = 0; k < 150; k++) {
+    const al = 0.75 + 2.2 * rnd(), az = rnd() * Math.PI * 2;
+    const lu = DONUT.u0 + (al + Math.PI / 2) / DONUT.A * (DONUT.u1 - DONUT.u0), sy = lu * 2 - 1, hh = Math.sqrt(1 - sy * sy);
+    const dx = hh * Math.sin(az), dz = hh * Math.cos(az), th = Math.acos(dz), rl = Math.hypot(dx, sy) || 1;
+    if (th > 2.7) continue;
+    g.fillStyle = cols[k % cols.length];
+    g.save(); g.translate((0.5 + dx / rl * th * 0.15915494) * S, (0.5 - sy / rl * th * 0.15915494) * S); g.rotate(rnd() * Math.PI);
+    g.beginPath(); g.roundRect(-8, -2.6, 16, 5.2, 2.6); g.fill(); g.restore();
+  }
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  return tex;
+}
+
+/* ───────────────────────── 胡萝卜 / 热狗 / 面包 / 脆皮冰激凌 ───────────────────────── */
+// 外形函数除了位置，还多返回几个数给贴图用（哪一部分、沿长度的位置……），这样形状和颜色的分界永远对得上。
+function centered(f) {               // 不对称的外形（胡萝卜、带棍的冰激凌）：把重心挪到正中，不然黏土会往一边滑
+  let ox = null, oz = 0;
+  return (x, y, z) => {
+    if (ox === null) { let sx = 0, sz = 0; for (let i = 0; i < N; i++) { const q = f(dirs[i*3], dirs[i*3+1], dirs[i*3+2]); sx += q[0]; sz += q[2]; } ox = sx / N; oz = sz / N; }
+    const q = f(x, y, z); q[0] -= ox; q[2] -= oz; return q;
+  };
+}
+function bakeTex(S, seed, colorAt) {  // 逐像素：像素 → 静止方向 → 颜色
+  const cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d');
+  const img = g.createImageData(S, S), D = img.data;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let py = 0; py < S; py++) for (let px = 0; px < S; px++) {
+    const u = (px + 0.5) / S - 0.5, v = 0.5 - (py + 0.5) / S, r = Math.hypot(u, v) || 1e-6;
+    const th = Math.min(Math.PI, r * 2 * Math.PI), sn = Math.sin(th);
+    const c = colorAt(u / r * sn, v / r * sn, Math.cos(th)), n = 0.97 + 0.06 * rnd(), o = (py * S + px) * 4;
+    D[o] = Math.min(255, c[0] * n); D[o+1] = Math.min(255, c[1] * n); D[o+2] = Math.min(255, c[2] * n); D[o+3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  return tex;
+}
+const sm01 = t => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
+
+// 胡萝卜：横躺，一头是叶子，往另一头越来越细
+function carrotRaw(x, y, z) {
+  const u = (x + 1) / 2, hl = Math.hypot(y, z) || 1, cy = y / hl, cz = z / hl, ang = Math.atan2(y, z), K = 1.15;
+  let X, r, part, t;
+  if (u < 0.2) {
+    t = u / 0.2; X = -1.72 + 0.57 * t; part = 1;
+    r = (0.07 + 0.2 * Math.sin(Math.PI * Math.pow(t, 0.7) * 0.93)) * (1 + 0.22 * Math.cos(3 * ang) * Math.sin(Math.PI * t)) * Math.sqrt(Math.min(1, t / 0.08));
+  } else {
+    t = (u - 0.2) / 0.8; X = -1.15 + 2.3 * t; part = 0;
+    const k = Math.min(1, t / 0.1);
+    r = (0.114 * (1 - k) + 0.46 * (1 - 0.8 * t) * Math.sqrt(k * (2 - k))) * (1 + 0.015 * Math.sin(X * 14)) * Math.sqrt(Math.min(1, (1 - t) / 0.05));
+  }
+  return [X * K, (r * cy + r) * K, r * cz * K, part, X, ang];
+}
+const carrotShape = centered(carrotRaw);
+function makeCarrotTex() {
+  return bakeTex(768, 41, (dx, dy, dz) => {
+    const q = carrotRaw(dx, dy, dz);
+    if (q[3] === 1) { const k = 0.5 + 0.5 * Math.cos(3 * q[5]); return [78 + 30 * k, 158 + 30 * k, 52 + 14 * k]; }     // 叶子
+    if (Math.sin(q[4] * 14) > 0.9 && Math.cos(q[5] * 2 + q[4] * 5) > 0.1) return [212, 98, 22];                    // 一圈圈的浅纹
+    return [246, 130, 36];
+  });
+}
+
+// 热狗：面包夹着一根露出半截的香肠。截面 = 面包的椭圆和香肠的圆取外轮廓
+function ellRay(cz, cy, oy, A, B) {   // 从椭圆里面的一点（比椭圆中心高 oy）朝 (cz, cy) 方向走，多远碰到椭圆
+  if (A <= 1e-6) return 0;
+  const a = cz * cz / (A * A) + cy * cy / (B * B), b = 2 * oy * cy / (B * B), c = oy * oy / (B * B) - 1;
+  return (-b + Math.sqrt(Math.max(0, b * b - 4 * a * c))) / (2 * a);
+}
+function hotdogShape(x, y, z) {
+  const X = 1.4 * x, hl = Math.hypot(y, z) || 1, cy = y / hl, cz = z / hl, ax = Math.abs(X);
+  const fb = ax < 1.27 ? Math.pow(1 - Math.pow(ax / 1.27, 3), 1 / 3) : 0, fs = Math.pow(Math.max(0, 1 - Math.pow(Math.abs(x), 3)), 1 / 3);
+  const lipA = (Math.acos(Math.max(-1, Math.min(1, cy))) - 0.8) / 0.3;                 // 面包两片“嘴唇”从香肠两边翘起来
+  const rb = ellRay(cz, cy, 0.35 * fb, 0.76 * fb, 0.62 * fb) * (1 + 0.5 * Math.exp(-lipA * lipA)), rs = ellRay(cz, cy, -0.27 * fs, 0.34 * fs, 0.34 * fs);
+  const rho = Math.max(rb, rs), Y0 = 0.35 + rho * cy, t = Y0 + 0.52;
+  return [X, -0.52 + 0.625 * t + 0.375 * Math.sqrt(t * t + 0.01), rho * cz, rs >= rb ? 1 : 0, Y0, cy];
+}
+function makeHotdogTex() {
+  return bakeTex(768, 43, (dx, dy, dz) => {
+    const q = hotdogShape(dx, dy, dz);
+    if (q[3] === 1) {
+      const fr = q[0] * 1.7 - Math.floor(q[0] * 1.7), zz = 0.11 * (4 * Math.abs(fr - 0.5) - 1);
+      if (q[5] > 0.55 && Math.abs(q[0]) < 1.15 && Math.abs(q[2] - zz) < 0.05) return [250, 204, 48];              // 黄芥末，之字形
+      return [194, 70, 44];
+    }
+    if (q[4] > 0.5) return [248, 220, 168];                                                                     // 面包切开的里面
+    const k = sm01((q[4] + 0.1) / 0.5); return [234 - 22 * k, 172 - 34 * k, 96 - 30 * k];
+  });
+}
+
+// 面包：一条山形吐司，顶上三个鼓包
+function breadShape(x, y, z) {
+  const X = 1.2 * x, f = Math.pow(Math.max(0, 1 - Math.pow(Math.abs(x), 4)), 0.25), hl = Math.hypot(y, z) || 1, cy = y / hl, cz = z / hl;
+  const base = 1 / (Math.pow(Math.pow(Math.abs(cz), 4) + Math.pow(Math.abs(cy), 4), 0.25) || 1);
+  const hump = 0.5 + 0.5 * Math.cos(X * Math.PI * 2 / 0.8), top = sm01(cy / 0.6), ov = Math.exp(-((cy - 0.45) / 0.25) * ((cy - 0.45) / 0.25));
+  return [X, 0.58 * base * cy * f * (1 + (0.18 + 0.16 * hump) * top), 0.62 * base * cz * f * (1 + 0.14 * ov), cy, hump];
+}
+function makeBreadTex() {
+  return bakeTex(768, 47, (dx, dy, dz) => {
+    const q = breadShape(dx, dy, dz), k = sm01((q[3] - 0.05) / 0.5), gr = Math.abs(q[0]) < 1 ? k * (1 - sm01(q[4] / 0.25)) * 0.14 : 0;
+    return [(238 - 44 * k) * (1 - gr), (184 - 74 * k) * (1 - gr), (106 - 62 * k) * (1 - gr)];
+  });
+}
+
+/* ───────────────────────── 麦芽糖捏捏：透明的 PVC 球皮里灌着麦芽糖，捏成一块正方体 ─────────────────────────
+   里面那团糖是软体本身（透明、回弹很慢）；球皮是罩在外面一点点的另一层透明膜，跟着一起变形。 */
+function maltShape(x, y, z) {
+  const k = 0.82 / (Math.pow(Math.pow(x, 6) + Math.pow(y, 6) + Math.pow(z, 6), 1 / 6) || 1);      // 圆角正方体
+  return [x * k, y * k, z * k];
+}
+const makeMaltTex = () => bakeTex(64, 71, () => [150, 208, 255]);      // 几乎无色，带一点点麦芽糖的暖色
+// 凡士林黄油条捏捏：一根半透明的黄色黄油条（圆角长方条），外面同样罩一层透明球皮
+function butterShape(x, y, z) {
+  const k = 1 / (Math.pow(Math.pow(x, 6) + Math.pow(y, 6) + Math.pow(z, 6), 1 / 6) || 1);
+  return [1.2 * x * k, 0.46 * y * k, 0.46 * z * k];      // 侧面（截面）是正方形
+}
+const makeButterTex = () => bakeTex(64, 89, () => [255, 214, 70]);
+const BUTTER_FEEL = { kShape: 60, damp: 330, vol: 0.3, spread: 0.34, gravity: 0.6 };      // 重力调小：不然这么软的东西放着就自己塌扁，侧面就不方了     // 比麦芽糖更软一点、回弹同样很慢
+const MALT_FEEL = { kShape: 40, damp: 560, vol: 0.3, spread: 0.22, gravity: 1 };    // 又软又黏：按下去的坑慢慢才回来
+const MALT_LOOK = { roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0.03, sheen: 0 };      // 透明用普通的半透明混合（画布背景是网页的，透射看不到它）
+/* 粉珠捏捏：白色球皮抽了真空，紧紧裹着里面一颗颗粉色的小珠子，珠子的形状和颜色都从皮底下透出来 */
+const SK = 0.5;                       // 球皮捏捏这一栏整体的大小（1 = 和别的捏捏一样大）
+const scaled = (f, k) => (x, y, z) => { const q = f(x, y, z); q[0] *= k; q[1] *= k; q[2] *= k; return q; };
+const BK = 2 / 3;                     // 粉珠捏捏：整颗球是原来的三分之二；珠子和手指都是原来的大小，所以珠子数按表面积相应减少
+const NB = Math.round((coarse ? 700 : 1300) * BK * BK), BEADS = new Float32Array(NB * 3);
+for (let i = 0; i < NB; i++) {        // 球面上均匀撒点（斐波那契螺线）：珠子挤得很密
+  const y = 1 - (i + 0.5) / NB * 2, r = Math.sqrt(1 - y * y), a = i * 2.39996323;
+  BEADS[i*3] = r * Math.cos(a); BEADS[i*3+1] = y; BEADS[i*3+2] = r * Math.sin(a);
+}
+const BEAD_R = 0.9 * BK * Math.sqrt(4 * Math.PI / NB) * 0.56;      // 珠子半径：相邻两颗几乎挨着
+// 三层：最里面是软体（深粉色，垫在珠子缝里）→ 一颗颗不会变形的硬珠子 → 最外面一层发白的球皮，
+// 球皮贴着珠子起伏（抽了真空），珠子的粉色只是从皮底下隐隐透出来。
+function beadShape(x, y, z) {
+  const R = 0.9; let Y = y * R; const t = Y + 0.74;
+  Y = -0.74 + 0.625 * t + 0.375 * Math.sqrt(t * t + 0.015);
+  return [x * R, Y, z * R];
+}
+const makeBeadTex = () => bakeTex(64, 83, () => [236, 120, 162]);
+// 珠子填满整个球：从贴着皮的那一层开始，一层套一层一直排到球心。越往里的层越小，珠子数也越少。
+const BEAD_DIR = [], BEAD_F = [];       // 每颗珠子的方向、离球心的比例（1 = 贴着皮）
+for (let f = 1, L = 0; f > 0.06; f -= BEAD_R * 1.72 / (0.9 * BK), L++) {
+  const n = L ? Math.max(4, Math.round(NB * f * f)) : NB, rot = L * 1.1, c = Math.cos(rot), sn = Math.sin(rot);
+  for (let i = 0; i < n; i++) {
+    let x, y, z;
+    if (L) { y = 1 - (i + 0.5) / n * 2; const r = Math.sqrt(1 - y * y), an = i * 2.39996323; x = r * Math.cos(an); z = r * Math.sin(an); const t = x * c - y * sn; y = x * sn + y * c; x = t; }   // 每层转个角度，互相错开
+    else { x = BEADS[i*3]; y = BEADS[i*3+1]; z = BEADS[i*3+2]; }
+    BEAD_DIR.push(x, y, z); BEAD_F.push(f);
+  }
+}
+const NBT = BEAD_F.length;
+const beadMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 7),
+  new THREE.MeshPhysicalMaterial({ color: 0xfbc3d6, roughness: 0.5, clearcoat: 0.15, clearcoatRoughness: 0.5 }), NBT);
+beadMesh.frustumCulled = false; beadMesh.visible = false; beadMesh.castShadow = true; scene.add(beadMesh);
+let beadVert = null, skinOff = null, skinNear = null; const _bm = new THREE.Matrix4(), KN = 6;
+const beadC = new Float32Array(NBT * 3);       // 每颗珠子现在的球心（前 NB 颗是贴着皮的那一层）
+// 积木捏捏：和粉珠是同一套（球皮、一按一个坑、填满整颗球），只是里面每一粒换成淡紫色的扁圆小积木——
+// 一片矮矮的圆片，顶上一个凸点。每粒朝向各不相同（外面那层大致平躺着贴在皮下），硬的，不变形也不转。
+const brickMesh = new THREE.InstancedMesh(
+  new THREE.LatheGeometry([[0, -0.3], [0.92, -0.3], [1, -0.22], [1, 0.2], [0.94, 0.26], [0.58, 0.26], [0.58, 0.5], [0.5, 0.56], [0, 0.56]].map(v => new THREE.Vector2(v[0], v[1])), 16),
+  new THREE.MeshPhysicalMaterial({ color: 0xd9c8f6, roughness: 0.45, clearcoat: 0.25, clearcoatRoughness: 0.4 }), NBT);
+brickMesh.frustumCulled = false; brickMesh.visible = false; brickMesh.castShadow = true; scene.add(brickMesh);
+const BRICK_Q = new Float32Array(NBT * 4), BRICK_S = BEAD_R * 1.22;
+{ const q = new THREE.Quaternion(), t = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), d = new THREE.Vector3(), ax = new THREE.Vector3();
+  let seed = 131; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let k = 0; k < NBT; k++) {
+    d.set(BEAD_DIR[k*3], BEAD_DIR[k*3+1], BEAD_DIR[k*3+2]); q.setFromUnitVectors(up, d);
+    ax.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize();
+    t.setFromAxisAngle(ax, k < NB ? rnd() * 0.75 : rnd() * Math.PI);          // 外层稍微歪一点，里面的随便躺
+    q.premultiply(t).toArray(BRICK_Q, k * 4);
+  } }
+const _bq = new THREE.Quaternion(), _bp = new THREE.Vector3(), _bs = new THREE.Vector3(BRICK_S, BRICK_S, BRICK_S);
+function beadsInit() {
+  beadVert = new Int32Array(NBT); skinOff = new Float32Array(N); skinNear = new Int32Array(N * KN).fill(-1);
+  const nd = new Float32Array(N * KN).fill(-2);
+  dirGridBuild();
+  for (let k = 0; k < NBT; k++) {       // 每颗珠子钉在它那个方向上的顶点上
+    const bx = BEAD_DIR[k*3], by = BEAD_DIR[k*3+1], bz = BEAD_DIR[k*3+2];
+    if (k >= NB) { beadVert[k] = dirGrid[cubeCell(bx, by, bz, DG)] * 3; continue; }      // 里面的层用方向网格粗找就够了
+    let best = -2, bi = 0;
+    for (let i = 0; i < N; i++) { const d = dirs[i*3] * bx + dirs[i*3+1] * by + dirs[i*3+2] * bz; if (d > best) { best = d; bi = i; } }
+    beadVert[k] = bi * 3;
+    const ax = dirs[bi*3], ay = dirs[bi*3+1], az = dirs[bi*3+2];
+    for (let i = 0; i < N; i++) {       // 每个顶点记下离它最近的 KN 颗最外层珠子：球皮每帧都要保证盖在它们外面
+      const d = dirs[i*3] * ax + dirs[i*3+1] * ay + dirs[i*3+2] * az, o = i * KN;
+      if (d <= nd[o + KN - 1]) continue;
+      let j = KN - 1; while (j > 0 && nd[o + j - 1] < d) { nd[o + j] = nd[o + j - 1]; skinNear[o + j] = skinNear[o + j - 1]; j--; }
+      nd[o + j] = d; skinNear[o + j] = k;
+    }
+  }
+  for (let i = 0; i < N; i++) {         // 球皮的高度：珠子顶上鼓起来，珠子之间陷下去
+    const d = Math.sqrt(Math.max(0, 2 - 2 * nd[i * KN])) * 0.9 * BK / BEAD_R;
+    skinOff[i] = 0.02 + (d < 1 ? BEAD_R * Math.sqrt(1 - d * d) : 0);
+  }
+}
+function beadsUpdate() {
+  if (TOYS[toyName].bigBeads) return bbUpdate();
+  if (!beadVert) beadsInit();
+  const bricks = !!TOYS[toyName].bricks;
+  for (let k = 0; k < NBT; k++) {       // 珠子大小永远不变；位置 = 球心到那块皮的连线上固定比例的地方，皮被按进去，一整串都跟着往里挤
+    const v = beadVert[k], f = BEAD_F[k], o = k * 3;
+    beadC[o] = pos[v] * f; beadC[o+1] = restCY + (pos[v+1] - restCY) * f; beadC[o+2] = pos[v+2] * f;
+    if (bricks) { _bm.compose(_bp.set(beadC[o], beadC[o+1], beadC[o+2]), _bq.fromArray(BRICK_Q, k * 4), _bs); brickMesh.setMatrixAt(k, _bm); }
+    else { _bm.makeScale(BEAD_R, BEAD_R, BEAD_R).setPosition(beadC[o], beadC[o+1], beadC[o+2]); beadMesh.setMatrixAt(k, _bm); }
+  }
+  (bricks ? brickMesh : beadMesh).instanceMatrix.needsUpdate = true;
+}
+function skinClear(P, R0 = BEAD_R, skinNear_ = skinNear, beadC_ = beadC) {                // 球皮上每个点都推到它附近那几颗珠子的外面
+  const R = R0 + 0.014, R2 = R * R, skinNear = skinNear_, beadC = beadC_;
+  for (let i = 0; i < N; i++) for (let j = 0, o = i * KN; j < KN; j++) {
+    const c = skinNear[o + j] * 3; if (c < 0) break;
+    const dx = P[i*3] - beadC[c], dy = P[i*3+1] - beadC[c+1], dz = P[i*3+2] - beadC[c+2], d2 = dx*dx + dy*dy + dz*dz;
+    if (d2 < R2 && d2 > 1e-10) { const m = R / Math.sqrt(d2); P[i*3] = beadC[c] + dx * m; P[i*3+1] = beadC[c+1] + dy * m; P[i*3+2] = beadC[c+2] + dz * m; }
+  }
+}
+/* 蓝珠捏捏：和粉珠同一个玩法（硬珠子、填满整颗球、一按一个坑），但球皮是透明的，珠子换成大一号的半透明蓝珠。
+   珠子大了，数量就少：最外层一百多颗，往里三四层。 */
+const BB = (() => {
+  const R0 = 0.9 * BK, r = 0.092, NBo = Math.round(4 * Math.PI * Math.pow(0.56 * R0 / r, 2)), dir = [], f = [];
+  for (let ff = 1, L = 0; ff > 0.12; ff -= r * 1.72 / R0, L++) {
+    const n = L ? Math.max(3, Math.round(NBo * ff * ff)) : NBo, rot = L * 1.1, c = Math.cos(rot), sn = Math.sin(rot);
+    for (let i = 0; i < n; i++) {
+      const y0 = 1 - (i + 0.5) / n * 2, rr = Math.sqrt(1 - y0 * y0), an = i * 2.39996323, x0 = rr * Math.cos(an);
+      dir.push(x0 * c - y0 * sn, x0 * sn + y0 * c, rr * Math.sin(an)); f.push(ff);
+    }
+  }
+  const n = f.length, mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 22, 16),
+    new THREE.MeshPhysicalMaterial({ color: 0x3f9dff, roughness: 0.06, clearcoat: 1, clearcoatRoughness: 0.04, transparent: true, opacity: 0.68, envMapIntensity: 2.2 }), n);
+  mesh.frustumCulled = false; mesh.visible = false; mesh.castShadow = true; scene.add(mesh);
+  return { R0, r, NBo, dir, f, n, mesh, vert: null, skinOff: null, skinNear: null, C: new Float32Array(n * 3) };
+})();
+function bbInit() {
+  const B = BB; B.vert = new Int32Array(B.n); B.skinOff = new Float32Array(N); B.skinNear = new Int32Array(N * KN).fill(-1);
+  const nd = new Float32Array(N * KN).fill(-2);
+  dirGridBuild();
+  for (let k = 0; k < B.n; k++) {
+    const bx = B.dir[k*3], by = B.dir[k*3+1], bz = B.dir[k*3+2];
+    if (k >= B.NBo) { B.vert[k] = dirGrid[cubeCell(bx, by, bz, DG)] * 3; continue; }
+    let best = -2, bi = 0;
+    for (let i = 0; i < N; i++) { const d = dirs[i*3] * bx + dirs[i*3+1] * by + dirs[i*3+2] * bz; if (d > best) { best = d; bi = i; } }
+    B.vert[k] = bi * 3;
+    const ax = dirs[bi*3], ay = dirs[bi*3+1], az = dirs[bi*3+2];
+    for (let i = 0; i < N; i++) {
+      const d = dirs[i*3] * ax + dirs[i*3+1] * ay + dirs[i*3+2] * az, o = i * KN;
+      if (d <= nd[o + KN - 1]) continue;
+      let j = KN - 1; while (j > 0 && nd[o + j - 1] < d) { nd[o + j] = nd[o + j - 1]; B.skinNear[o + j] = B.skinNear[o + j - 1]; j--; }
+      nd[o + j] = d; B.skinNear[o + j] = k;
+    }
+  }
+  for (let i = 0; i < N; i++) { const d = Math.sqrt(Math.max(0, 2 - 2 * nd[i * KN])) * B.R0 / B.r; B.skinOff[i] = 0.02 + (d < 1 ? B.r * Math.sqrt(1 - d * d) : 0); }
+}
+function bbUpdate() {
+  const B = BB; if (!B.vert) bbInit();
+  for (let k = 0, o = 0; k < B.n; k++, o += 3) {
+    const v = B.vert[k], f = B.f[k];
+    B.C[o] = pos[v] * f; B.C[o+1] = restCY + (pos[v+1] - restCY) * f; B.C[o+2] = pos[v+2] * f;
+    _bm.makeScale(B.r, B.r, B.r).setPosition(B.C[o], B.C[o+1], B.C[o+2]); B.mesh.setMatrixAt(k, _bm);
+  }
+  B.mesh.instanceMatrix.needsUpdate = true;
+}
+const BEAD_FEEL = { kShape: 320, damp: 90, vol: 0.05, spread: 0.16, plastic: 30, yield: 0.02, cap: 0.6, gravity: 2, fixed: true };      // 没有弹性：按多深就留多深      // 按下去就留一个坑
+/* ───────────────────────── 碳酸小袋子捏捏 ─────────────────────────
+   软体 = 袋子里那包透明的水（扁扁的枕头形）；水里泡着几只硬的蜡皮猫爪，肚子里是小苏打。
+   哪只猫爪被压扁（它头顶的水面被按到贴近桌面），哪只就碎掉、开始往外冒泡；泡泡往上浮，袋子跟着慢慢鼓起来。 */
+function fizzRho(cx, cz) {            // 从袋子中心朝 (cx, cz) 方向走多远到边
+  const R = 1.3, Z0 = 0.52, dc = -Z0 * cz, t1 = dc + Math.sqrt(dc * dc - Z0 * Z0 + R * R);          // 到圆弧的距离
+  const t2 = cz < -1e-4 ? Z0 / -cz : 1e3;                                                             // 到直边的距离
+  return Math.pow(Math.pow(t1, -8) + Math.pow(t2, -8), -1 / 8);                                       // 取近的那个，拐角磨圆
+}
+function fizzShape(x, y, z) {        // 半圆形的小袋子：后面一条直边，前面一道圆弧，中间鼓起来
+  const hl = Math.hypot(x, z) || 1, cx = x / hl, cz = z / hl, rho = fizzRho(cx, cz);
+  const r = Math.pow(Math.max(0, 1 - Math.pow(Math.abs(y), 2.4)), 1 / 2.4);
+  return [cx * r * rho, 0.3 * Math.sign(y) * Math.pow(Math.abs(y), 0.8), cz * r * rho];
+}
+const makeFizzTex = () => bakeTex(64, 97, () => [70, 160, 255]);
+const makeFizzTexO = () => bakeTex(64, 97, () => [255, 176, 40]);      // 橘子汽水
+const makeFizzTexC = () => bakeTex(64, 97, () => [58, 22, 8]);        // 可乐
+const makeFizzTexL = () => bakeTex(64, 97, () => [226, 242, 250]);     // 荔枝汽水：几乎无色
+const FIZZ_FEEL = { kShape: 70, damp: 110, vol: 1.0, spread: 0.36, gravity: 3 };
+const FIZZ_LOOK = { roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.04, sheen: 0 };      // 水本身不反光：不然袋底那一面上全是跟着抖的高光条纹
+// 气泡水这一家：袋子、冒泡、胀气、碎壳都是同一套，只是水的颜色和泡在里面的东西不一样。
+// 每样东西由几个椭球拼成：[x, y, z, sx, sy, sz, 颜色]；at = 每个放在哪（x, z, 朝向）；h = 半高；crushAt = 头顶被按到多低算压碎；
+// rate = 每个碎了以后每秒冒多少泡；shard = 碎片的两种颜色；ss = 碎片大小
+const FZK = {
+  lemon:  { parts: [[0, 0, 0, 0.36, 0.25, 0.26, 0xffe24a], [0.36, 0, 0, 0.09, 0.08, 0.08, 0xf0c62e], [-0.36, 0, 0, 0.09, 0.08, 0.08, 0xf0c62e]],
+            at: [[0, 0.08, 0.25]], h: 0.25, crushAt: 0.4, rate: 620, shard: [0xffe24a, 0xffe24a], ss: 1 },
+  orange: { parts: [[0, 0, 0, 0.27, 0.075, 0.27, 0xe85a00], [0, 0, 0, 0.215, 0.088, 0.215, 0xffa01e], [0, 0, 0, 0.045, 0.095, 0.045, 0xfff6e0]],      // 厚橘子片：橙色的皮、浅色的果肉、中间一点白芯
+            at: [[-0.52, 0.02, 0.2], [0.1, 0.34, 1.1], [0.56, -0.1, 2.2]], h: 0.075, crushAt: 0.3, rate: 250, shard: [0xff8a1a, 0xffb84d], ss: 0.6 },
+  cola:   { parts: [[-0.08, 0, 0, 0.3, 0.16, 0.16, 0xf4f1e8], [-0.08, 0, 0, 0.19, 0.17, 0.17, 0xe0202a], [0.22, 0, 0, 0.17, 0.105, 0.105, 0xf4f1e8],        // 小汽水瓶：瓶身、红色的标签、瓶肩、瓶颈、瓶盖
+                    [0.4, 0, 0, 0.09, 0.055, 0.055, 0xf4f1e8], [0.49, 0, 0, 0.035, 0.066, 0.066, 0xe0202a]],
+            at: [[0, 0.08, 0.2]], h: 0.17, crushAt: 0.33, rate: 620, shard: [0xf4f1e8, 0xe0202a], ss: 0.75 },
+  lychee: { parts: [[0.07, 0.02, 0, 0.23, 0.23, 0.23, 0xfffaf5], [-0.07, -0.02, 0, 0.25, 0.25, 0.25, 0xd63a50], [0.19, -0.17, 0.13, 0.11, 0.035, 0.09, 0xd63a50],   // 剥开一半的荔枝：白色的果肉从红壳里露出来，旁边翻着两片剥下来的壳
+                    [0.22, -0.16, -0.11, 0.09, 0.035, 0.11, 0xc9304a], [-0.31, 0.02, 0, 0.04, 0.04, 0.04, 0x6b4a2a]],
+            at: [[0, 0.08, 0.3]], h: 0.26, crushAt: 0.4, rate: 620, shard: [0xd63a50, 0xfff3ee], ss: 0.8 },
+};
+// 泡在水里的小道具：每样单独建模（回转体、带贴图的圆片、开口的壳……），不再用几个椭球凑
+const FZM = (color, o = {}) => new THREE.MeshPhysicalMaterial({ color, roughness: 0.45, clearcoat: 0.6, clearcoatRoughness: 0.25, ...o });
+const lathe = (pts, seg = 32) => new THREE.LatheGeometry(pts.map(v => new THREE.Vector2(v[0], v[1])), seg);
+const FZMODEL = {
+  lemon() {                            // 柠檬：两头带小尖的纺锤形，表皮有细小的坑洼，一头有个绿色的果蒂
+    const pts = [[0, -0.45], [0.03, -0.445], [0.05, -0.42], [0.075, -0.385]];
+    for (let i = 0; i <= 20; i++) { const a = 0.42 + (Math.PI - 0.84) * i / 20; pts.push([0.255 * Math.pow(Math.sin(a), 0.8), -0.4 * Math.cos(a)]); }
+    pts.push([0.075, 0.385], [0.05, 0.42], [0.03, 0.445], [0, 0.45]);
+    const geo = lathe(pts, 36), P = geo.attributes.position;
+    for (let i = 0; i < P.count; i++) { const x = P.getX(i), y = P.getY(i), z = P.getZ(i), k = 1 + 0.014 * Math.sin(x * 60 + y * 31) * Math.sin(z * 55 - y * 27); P.setXYZ(i, x * k, y, z * k); }
+    geo.computeVertexNormals(); geo.rotateZ(Math.PI / 2);
+    const g = new THREE.Group(); g.add(new THREE.Mesh(geo, FZM(0xffe14a, { roughness: 0.55 })));
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.03, 0.035, 10), FZM(0x86a83c)); stem.rotation.z = Math.PI / 2; stem.position.x = -0.455; g.add(stem);
+    return g;
+  },
+  orange() {                           // 厚橘子片：一圈圆润的橙皮，切面上是一瓣一瓣的果肉、白色的筋和中间的白芯
+    const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S; const c = cv.getContext('2d'), C = S / 2;
+    c.fillStyle = '#f37a12'; c.fillRect(0, 0, S, S);
+    c.fillStyle = '#fff1d2'; c.beginPath(); c.arc(C, C, C * 0.9, 0, 7); c.fill();                    // 白色的内皮
+    for (let k = 0; k < 10; k++) {       // 十瓣果肉
+      const a0 = k / 10 * 6.2832 + 0.05, a1 = (k + 1) / 10 * 6.2832 - 0.05, gr = c.createRadialGradient(C, C, C * 0.1, C, C, C * 0.82);
+      gr.addColorStop(0, '#ffb646'); gr.addColorStop(1, '#ff8f1a'); c.fillStyle = gr;
+      c.beginPath(); c.moveTo(C + Math.cos((a0 + a1) / 2) * C * 0.1, C + Math.sin((a0 + a1) / 2) * C * 0.1); c.arc(C, C, C * 0.82, a0, a1); c.closePath(); c.fill();
+      c.strokeStyle = 'rgba(255,225,160,.55)'; c.lineWidth = 1.2;                                     // 果肉里一丝一丝的纹
+      for (let j = 1; j < 5; j++) { const a = a0 + (a1 - a0) * j / 5; c.beginPath(); c.moveTo(C + Math.cos(a) * C * 0.22, C + Math.sin(a) * C * 0.22); c.lineTo(C + Math.cos(a) * C * 0.76, C + Math.sin(a) * C * 0.76); c.stroke(); }
+    }
+    c.fillStyle = '#fff6e2'; c.beginPath(); c.arc(C, C, C * 0.09, 0, 7); c.fill();
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+    const face = FZM(0xffffff, { map: tex, roughness: 0.3 }), rind = FZM(0xf37a12, { roughness: 0.6 });
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.262, 0.262, 0.115, 44), [rind, face, face]));
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.262, 0.06, 12, 44), rind); ring.rotation.x = Math.PI / 2; g.add(ring);      // 皮的边是圆的
+    return g;
+  },
+  cola() {                             // 小汽水瓶：有瓶底、收腰的瓶身、瓶肩、细瓶颈和瓶口；腰上一圈红标签，顶上一个带齿的瓶盖
+    const body = lathe([[0, 0], [0.11, 0], [0.142, 0.012], [0.152, 0.04], [0.152, 0.1], [0.14, 0.17], [0.126, 0.24], [0.132, 0.31], [0.15, 0.39], [0.156, 0.46], [0.15, 0.53],
+                        [0.128, 0.6], [0.098, 0.67], [0.072, 0.74], [0.058, 0.8], [0.054, 0.85], [0.064, 0.862], [0.064, 0.885], [0.054, 0.89], [0.054, 0.905], [0, 0.905]], 36);
+    const S = 256, cv = document.createElement('canvas'); cv.width = S; cv.height = 64; const c = cv.getContext('2d');
+    c.fillStyle = '#df1f2b'; c.fillRect(0, 0, S, 64); c.strokeStyle = '#ffffff'; c.lineWidth = 7; c.lineCap = 'round';
+    c.beginPath(); for (let x = 0; x <= S; x += 4) { const y = 32 + 13 * Math.sin(x / S * 6.2832 * 2); x ? c.lineTo(x, y) : c.moveTo(x, y); } c.stroke();       // 标签上一道白色的波浪
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.wrapS = THREE.RepeatWrapping;
+    const g = new THREE.Group(), inner = new THREE.Group(); g.add(inner);
+    inner.add(new THREE.Mesh(body, FZM(0xe9f6ee, { roughness: 0.06, clearcoat: 1, clearcoatRoughness: 0.03 })));      // 浅绿白的玻璃
+    const label = new THREE.Mesh(new THREE.CylinderGeometry(0.159, 0.156, 0.15, 36, 1, true), FZM(0xffffff, { map: tex, roughness: 0.5, clearcoat: 0.2 })); label.position.y = 0.45; inner.add(label);
+    const capPts = []; for (let i = 0; i <= 44; i++) { const a = i / 44 * 6.2832, r = 0.07 + 0.006 * Math.cos(a * 22); capPts.push(new THREE.Vector2(Math.cos(a) * r, Math.sin(a) * r)); }
+    const capGeo = new THREE.ExtrudeGeometry(new THREE.Shape(capPts), { depth: 0.04, bevelEnabled: true, bevelSize: 0.006, bevelThickness: 0.008, bevelSegments: 2 }); capGeo.rotateX(-Math.PI / 2);
+    const cap = new THREE.Mesh(capGeo, FZM(0xdf1f2b, { roughness: 0.3, metalness: 0.4 })); cap.position.y = 0.885; inner.add(cap);
+    inner.position.y = -0.45; g.rotation.z = -Math.PI / 2;      // 躺着放，瓶盖朝 +x
+    const out = new THREE.Group(); out.add(g); return out;
+  },
+  lychee() {                           // 剥开一半的荔枝：红壳上一粒粒的凸起，顶上剥开，露出圆润的白果肉，底下一个小果蒂
+    const R = 0.238, T0 = 1.12, bump = geo => { const P = geo.attributes.position;
+      for (let i = 0; i < P.count; i++) { const x = P.getX(i), y = P.getY(i), z = P.getZ(i), l = Math.hypot(x, y, z) || 1, th = Math.acos(y / l), ph = Math.atan2(z, x);
+        const k = 1 + 0.05 * Math.pow(Math.abs(Math.sin(th * 13) * Math.sin(ph * Math.max(3, Math.round(13 * Math.sin(th))))), 0.6); P.setXYZ(i, x * k, y * k, z * k); }
+      geo.computeVertexNormals(); return geo; };
+    const red = FZM(0xd3304a, { roughness: 0.62, clearcoat: 0.25, side: THREE.DoubleSide });
+    const g = new THREE.Group(), tilt = new THREE.Group(); g.add(tilt);
+    tilt.add(new THREE.Mesh(bump(new THREE.SphereGeometry(R, 52, 30, 0, 6.2832, T0, Math.PI - T0)), red));
+    const flesh = new THREE.Mesh(new THREE.SphereGeometry(R * 0.94, 36, 26), FZM(0xfffcf7, { roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.05, sheen: 0.6 })); flesh.position.y = 0.035; tilt.add(flesh);
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.028, 0.06, 8), FZM(0x6b4a2a, { roughness: 0.8, clearcoat: 0 })); stem.position.y = -R - 0.02; tilt.add(stem);
+    tilt.rotation.z = -0.35; tilt.rotation.x = 0.3;      // 开口稍微朝着镜头
+    return g;
+  },
+};
+const FZCACHE = {};
+const NPAW = 3, PAWCAP = 16, NBUB = coarse ? 3200 : 11000;      // 最多三样东西、一共最多 16 个椭球
+const pawMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 14, 10), new THREE.MeshPhysicalMaterial({ roughness: 0.45, clearcoat: 0.4, clearcoatRoughness: 0.3 }), PAWCAP);
+const bubMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 6, 4), new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.1, clearcoat: 1, transparent: true, opacity: 0.5, depthWrite: false, depthTest: false }), NBUB);
+{ const a = bubMesh.instanceMatrix.array; a.fill(0); for (let i = 15; i < a.length; i += 16) a[i] = 1; }
+bubMesh.renderOrder = 0.5;     // 泡画在水的上面（不然被水的颜色盖得发虚），再让袋子皮罩在最外面
+for (const m of [pawMesh, bubMesh]) { m.frustumCulled = false; m.visible = false; scene.add(m); }
+const FIZZ = { paw: [], bub: new Float32Array(NBUB * 6), next: 0, gas: 0, acc: 0, rate: 0 };       // 泡泡：x, y, z, 半径, 剩余寿命, 属于哪只猫爪
+const _pm = new THREE.Matrix4(), _pq = new THREE.Quaternion(), _pv = new THREE.Vector3(), _ps = new THREE.Vector3(), _py = new THREE.Vector3(0, 1, 0);
+// 柠檬碎掉以后的蜡片：从柠檬壳上掰下来的弧形壳片。四种不同的形状（大小、宽窄、弯的程度都不一样），每只柠檬每种两片
+const SHG = [[1.7, 0.25, 1.15, 5, 4], [1.15, 0.95, 1.25, 4, 4], [2.2, 1.55, 0.95, 6, 3], [0.95, 0.35, 0.85, 3, 3]];      // phi 跨度、theta 起点、theta 跨度、分段
+const SHPER = 4, NSH = SHG.length * SHPER;
+const shardMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.4, clearcoat: 0.5, side: THREE.DoubleSide });
+// 一块有厚度的壳：外面一层球面、里面一层小一圈的球面，四周用断面封起来。蜡皮是厚的，碎了应该是一块块的，不是纸片
+function thickPatch(phiLen, th0, thLen, sw, sh, inner = 0.74) {
+  const P = [], I = [], W = sw + 1, at = (r, i, j) => { const ph = phiLen * i / sw, th = th0 + thLen * j / sh; P.push(-r * Math.cos(ph) * Math.sin(th), r * Math.cos(th), r * Math.sin(ph) * Math.sin(th)); };
+  for (const r of [1, inner]) for (let j = 0; j <= sh; j++) for (let i = 0; i <= sw; i++) at(r, i, j);
+  const N1 = W * (sh + 1), id = (L, i, j) => L * N1 + j * W + i;
+  for (let j = 0; j < sh; j++) for (let i = 0; i < sw; i++) {
+    I.push(id(0, i + 1, j), id(0, i, j), id(0, i + 1, j + 1), id(0, i, j), id(0, i, j + 1), id(0, i + 1, j + 1));          // 外面
+    I.push(id(1, i, j), id(1, i + 1, j), id(1, i + 1, j + 1), id(1, i, j + 1), id(1, i, j), id(1, i + 1, j + 1));          // 里面（朝里）
+  }
+  for (let i = 0; i < sw; i++) for (const j of [0, sh]) I.push(id(0, i, j), id(0, i + 1, j), id(1, i + 1, j), id(0, i, j), id(1, i + 1, j), id(1, i, j));      // 上下两道断面
+  for (let j = 0; j < sh; j++) for (const i of [0, sw]) I.push(id(0, i, j), id(0, i, j + 1), id(1, i, j + 1), id(0, i, j), id(1, i, j + 1), id(1, i, j));      // 左右两道断面
+  let g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setIndex(I);
+  g = g.toNonIndexed(); g.computeVertexNormals();      // 每个面各自的法线：断面的棱是硬的
+  return g;
+}
+const shardMeshes = SHG.map(g => { const m = new THREE.InstancedMesh(thickPatch(g[0], g[1], g[2], g[3] + 2, g[4] + 2), shardMat, NPAW * SHPER);
+  m.frustumCulled = false; m.visible = false; scene.add(m); return m; });
+const SH = new Float32Array(NPAW * NSH * 10);    // 每片：偏移 xyz、朝向四元数 xyzw、大小 xyz
+// 水里的闪片：很多小小的六角亮片，金、银、粉、蓝几种颜色，慢慢打着转漂在水里；一冒泡、一揉袋子就被搅得翻飞
+const NGL = coarse ? 160 : 380, glitMesh = new THREE.InstancedMesh(new THREE.CircleGeometry(1, 6),
+  new THREE.MeshPhysicalMaterial({ metalness: 0.35, roughness: 0.18, envMapIntensity: 3.2, emissive: 0xffffff, emissiveIntensity: 0.32, side: THREE.DoubleSide }), NGL);      // 带一点自发光：背光的那些片才不会发灰
+glitMesh.frustumCulled = false; glitMesh.visible = false; scene.add(glitMesh);
+const GL = new Float32Array(NGL * 8);            // 每片：方向角、离中心的比例、高度比例、大小、转轴 xyz、相位
+{ const cols = [0xffe9a8, 0xffffff, 0xffb8d9, 0xa8e4ff, 0xd9c2ff, 0xfff3c4].map(c => new THREE.Color(c));
+  for (let i = 0, o = 0; i < NGL; i++, o += 8) {
+    GL[o] = Math.random() * 6.2832; GL[o+1] = Math.sqrt(Math.random()) * 0.86; GL[o+2] = Math.random(); GL[o+3] = 0.014 + Math.random() * Math.random() * 0.034;
+    GL[o+4] = Math.random() - 0.5; GL[o+5] = Math.random() - 0.5; GL[o+6] = Math.random() - 0.5; GL[o+7] = Math.random() * 100;
+    glitMesh.setColorAt(i, cols[i % cols.length]);
+  } }
+// 液面：胀气的时候袋子变大，水并没有变多，所以水只画到液面为止，上面空出来的是气
+const fizzPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 9);
+function fizzReset() {
+  FIZZ.paw.length = 0; FIZZ.bub.fill(0); FIZZ.next = 0; FIZZ.gas = 0; FIZZ.acc = 0; FIZZ.rate = 0; FIZZ.h0 = 0; fizzPlane.constant = 9;
+  const K = FIZZ.K = FZK[TOYS[toyName].fizz], np = K.parts.length, _c = new THREE.Color(), _z = new THREE.Matrix4().makeScale(0, 0, 0);
+  for (let i = 0; i < PAWCAP; i++) { pawMesh.setMatrixAt(i, _z); pawMesh.setColorAt(i, _c.set(K.parts[i % np][6])); }
+  pawMesh.instanceColor.needsUpdate = true;
+  shardMeshes.forEach((m, gi) => { for (let i = 0; i < NPAW * SHPER; i++) { m.setMatrixAt(i, _z); m.setColorAt(i, _c.set(K.shard[(i + gi) % 2])); } m.instanceColor.needsUpdate = true; });
+  for (const g of FIZZ.models || []) g.visible = false;
+  const kind = TOYS[toyName].fizz;
+  FIZZ.models = FZCACHE[kind] ||= K.at.map(() => { const g = FZMODEL[kind](); g.traverse(o => { o.frustumCulled = false; }); scene.add(g); return g; });
+  for (const [x, z, rot] of K.at) {  // 每样东西挂在它正上方那块袋子皮上
+    let best = 0, bd = 1e9;
+    for (let i = 0; i < N * 3; i += 3) { if (pos[i+1] < restCY) continue; const d = (pos[i] - x) * (pos[i] - x) + (pos[i+2] - z) * (pos[i+2] - z); if (d < bd) { bd = d; best = i; } }
+    FIZZ.paw.push({ v: best, rot, crushed: 0, fizz: 0, age: 0, x: 0, y: 0, z: 0 });
+  }
+  const q = new THREE.Quaternion(), ax = new THREE.Vector3();
+  for (let i = 0, o = 0; i < NPAW * NSH; i++, o += 10) {      // 蜡片在柠檬里的位置、朝向、大小，每片都不一样
+    const u = Math.random() * 2 - 1, an = Math.random() * 6.283, h = Math.sqrt(1 - u * u), m = 0.55 + 0.45 * Math.random();
+    SH[o] = h * Math.cos(an) * 0.3 * m * K.ss; SH[o+1] = u * 0.16 * m * K.ss; SH[o+2] = h * Math.sin(an) * 0.22 * m * K.ss;
+    q.setFromAxisAngle(ax.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(), Math.random() * 6.283).toArray(SH, o + 3);
+    const g = (0.7 + Math.random() * 0.4) * K.ss; SH[o+7] = 0.36 * g; SH[o+8] = 0.25 * g; SH[o+9] = 0.26 * g;      // 壳片和柠檬一样大的弧度，略有大小
+  }
+}
+function fizzUpdate(dt) {
+  const B = FIZZ.bub, K = FIZZ.K, NPP = K.parts.length; let rate = 0, bagTop = 0, bcx = 0, bcz = 0;
+  for (let i = 0; i < N * 3; i += 3) { if (pos[i+1] > bagTop) bagTop = pos[i+1]; bcx += pos[i]; bcz += pos[i+2]; }
+  bcx /= N; bcz /= N;                 // 袋子现在的中心
+  if (FIZZ.gas > 0 && !FIZZ.h0) FIZZ.h0 = bagTop;                               // 开始冒气那一刻的高度 = 水原本的高度
+  const level = FIZZ.h0 ? FIZZ.h0 * (1 - 0.3 * (1 - 1 / volScale)) : 9;        // 袋子胀大，同样多的水摊得更开，液面还会略微下降
+  fizzPlane.constant = level;
+  FIZZ.paw.forEach((pw, k) => {
+    const top = pos[pw.v + 1];
+    if (!pw.crushed && top < K.crushAt && dt > 0) {       // 蜡皮很厚：要一直捏着，先裂一道、再裂一道，捏够了才整个碎掉。松手不会恢复，下次接着捏
+      pw.dmg = (pw.dmg || 0) + dt; const st = Math.min(3, (pw.dmg / 0.6) | 0);
+      if (st > (pw.stage || 0)) { pw.stage = st; if (st < 3) sfx.crack(3 + st * 2, false); }
+      if (st >= 3) { pw.crushed = 1; pw.fizz = 16; pw.age = 0; sfx.crack(7, true); sfx.fizzOpen(); }
+    }      // 被压扁了：蜡皮碎成一片片，小苏打开始反应
+    pw.x = pos[pw.v]; pw.z = pos[pw.v + 2]; pw.y = Math.max(K.h, Math.min(top, level) - K.h - 0.02);
+    _pq.setFromAxisAngle(_py, pw.rot);
+    { const g = FIZZ.models[k], sq = !pw.crushed && top < K.crushAt ? 1 : 0, stg = pw.stage || 0;      // 被捏着的时候压扁一点、跟着发抖，裂得越多抖得越厉害
+      g.visible = !pw.crushed; g.position.set(pw.x, pw.y, pw.z); g.rotation.y = pw.rot + sq * 0.03 * (1 + stg) * Math.sin(performance.now() * 0.07);
+      g.scale.set(1 + 0.05 * sq * (1 + stg), 1 - 0.07 * sq * (1 + stg), 1 + 0.05 * sq * (1 + stg)); }      // 完好的小道具；碎了就不画整只的了
+    if (pw.crushed) pw.age += dt;
+    const t = Math.min(1, pw.age / 0.6), e = 1 - (1 - t) * (1 - t);              // 碎片先迸开，再沉到袋底摊成一小堆
+    for (let j = 0, o = k * NSH * 10; j < NSH; j++, o += 10) {
+      const sc = pw.crushed ? 1 : 0, sp = 1 + 0.9 * e;
+      _pv.set(SH[o] * sp, 0, SH[o+2] * sp).applyQuaternion(_pq);
+      let sx = pw.x + _pv.x - bcx, sz = pw.z + _pv.z - bcz;                      // 相对袋子中心
+      const sl = Math.hypot(sx, sz) || 1e-6, lim = fizzRho(sx / sl, sz / sl) * 0.97 - 0.42 * K.ss;       // 壳片整片都要留在袋子里
+      if (sl > lim) { sx *= lim / sl; sz *= lim / sl; }
+      const y0 = pw.y + SH[o+1], y1 = Math.min(0.2 + (j % 4) * 0.015, Math.max(0.12, top - 0.1));
+      _pm.compose(_pv.set(bcx + sx, y0 + (y1 - y0) * e, bcz + sz), _bq2.fromArray(SH, o + 3), _ps.set(SH[o+7] * sc, SH[o+8] * sc, SH[o+9] * sc));
+      shardMeshes[j % SHG.length].setMatrixAt(k * SHPER + ((j / SHG.length) | 0), _pm);
+    }
+    const leak = !pw.crushed && pw.stage ? pw.stage : 0;      // 裂了但还没碎：从裂缝里先漏出一点点泡
+    if (pw.fizz > 0 || leak) {          // 冒泡：刚碎的时候最猛，之后慢慢弱下去；这时候再揉袋子会冒得更凶
+      if (pw.fizz > 0) pw.fizz -= dt; const hot = 5 * Math.pow(Math.max(0, pw.fizz) / 16, 2.4), r = leak ? 22 * leak :      /* 刚碎的那一刻最猛（原来的五倍），然后一路减少 */ K.rate * hot + Math.min(400, activity * 900) / K.at.length; rate += r;
+      for (let q = 0; q < 60; q++) { const i = ((Math.random() * N) | 0) * 3; if (pos[i+1] > restCY) vel[i+1] += (Math.random() - 0.35) * 2.2 * hot; }      // 水面被气顶得直翻腾
+      pw.acc = (pw.acc || 0) + r * dt;
+      while (pw.acc >= 1) {
+        pw.acc--; const o = FIZZ.next * 6; FIZZ.next = (FIZZ.next + 1) % NBUB; FIZZ.gas++;
+        if (leak || Math.random() < 0.22) { B[o] = pw.x + (Math.random() - 0.5) * 1.0; B[o+2] = pw.z + (Math.random() - 0.5) * 0.8; }      // 一小部分从碎片那里冒
+        else { const an = Math.random() * 6.2832, ca = Math.cos(an), sa = Math.sin(an), q = Math.sqrt(Math.random()) * 0.93 * fizzRho(ca, sa); B[o] = bcx + ca * q; B[o+2] = bcz + sa * q; }      // 大部分：整袋水到处都在冒
+        B[o+1] = 0.03 + Math.random() * 0.25;
+        B[o+3] = 0.007 + Math.random() * Math.random() * 0.03; B[o+4] = 1.0 + Math.random() * 1.8;
+        { const ex = B[o] - bcx, ez = B[o+2] - bcz, el = Math.hypot(ex, ez) || 1e-6; B[o+5] = Math.min(0.999, el / fizzRho(ex / el, ez / el)); }      // 离袋子中心多远（0~1）：越靠边，袋顶越低
+      }
+    }
+  });
+  const BM = bubMesh.instanceMatrix.array;
+  for (let i = 0, o = 0; i < NBUB; i++, o += 6) {
+    let r = 0;
+    if (B[o+4] > 0) {                   // 从碎片那里往上浮，浮到液面就停住，过一会儿破掉
+      const ceil = Math.min(bagTop * Math.pow(1 - Math.pow(B[o+5], 2.4), 0.34) - 0.03, level) - B[o+3];
+      B[o+1] += (0.3 + B[o+3] * 22) * dt; B[o] += Math.sin(B[o+1] * 31 + i) * 0.1 * dt;
+      if (B[o+1] >= ceil) { B[o+1] = ceil; B[o+4] -= dt; }
+      r = B[o+3] * Math.min(1, B[o+4] * 6);
+    }
+    const m = i * 16; BM[m] = BM[m+5] = BM[m+10] = r; BM[m+12] = B[o]; BM[m+13] = B[o+1]; BM[m+14] = B[o+2];      // 直接写矩阵：泡太多了，一个个 setMatrixAt 太慢
+  }
+  FIZZ.spin = (FIZZ.spin || 0) + dt * (0.35 + 5 * Math.min(1, rate / 260 + activity * 3));      // 越闹腾转得越快
+  const gTop = Math.min(bagTop, level) - 0.07;
+  for (let i = 0, o = 0; i < NGL; i++, o += 8) {
+    const ph = GL[o+7], a = GL[o] + 0.12 * Math.sin(FIZZ.spin * 0.3 + ph), cx = Math.cos(a), cz = Math.sin(a);
+    const rr = GL[o+1] * (fizzRho(cx, cz) - 0.12), yy = 0.05 + (0.5 + 0.5 * Math.sin(FIZZ.spin * 0.21 + ph)) * GL[o+2] * Math.max(0.05, gTop - 0.05);
+    _pm.compose(_pv.set(bcx + cx * rr, yy, bcz + cz * rr), _bq2.setFromAxisAngle(_ps.set(GL[o+4], GL[o+5], GL[o+6]).normalize(), FIZZ.spin * (0.6 + (i % 5) * 0.25) + ph), _ps.set(GL[o+3], GL[o+3], GL[o+3]));
+    glitMesh.setMatrixAt(i, _pm);
+  }
+  glitMesh.instanceMatrix.needsUpdate = true;
+  pawMesh.instanceMatrix.needsUpdate = true; bubMesh.instanceMatrix.needsUpdate = true; for (const m of shardMeshes) m.instanceMatrix.needsUpdate = true;
+  volScale = 1 + 1.15 * (1 - Math.exp(-FIZZ.gas / 3600));       // 气越多，袋子越鼓
+  FIZZ.rate = rate;
+}
+const _bq2 = new THREE.Quaternion();
+/* ───────────────────────── 肥皂球捏捏 ─────────────────────────
+   一丝一丝的肥皂搓成一个团、晒干了。整颗球就是很多根弯弯的肥皂丝，一层套一层排到球心。
+   软体本身不画，只负责“哪里被按下去了”：某根肥皂丝所在的地方被按得够深，它就从球上崩下来，
+   掉到托盘上，一粒粒堆成一堆碎屑。碎得差不多了，剩下的也撑不住，整颗球散掉。 */
+// （改成了好几颗小一点的球堆在一起。看不见的软体只是罩在这堆球外面的一个“罩子”，用来接手指；
+//   真正决定谁碎的是手指本身：指尖碰到哪根丝，哪根就崩下来，同时迸出两粒更小的碎渣。一颗球碎掉一半，剩下的也跟着散。）
+const SOAP_BALLS = [[-0.96, 0.16], [0, 0.5], [0.96, 0.16], [-0.5, -0.5], [0.5, -0.5]], SOAP_R = 0.37, NBALL = SOAP_BALLS.length;      // 球和球之间留一点缝，看得出是一颗一颗的
+const SP_REST = [], SP_BALL = [];
+for (let bi = 0; bi < NBALL; bi++) for (let f = 1, L = 0; f > 0.15; f -= 0.2, L++) {
+  const n = Math.max(5, Math.round((coarse ? 100 : 240) * f * f)), rot = L * 1.3 + bi, c = Math.cos(rot), sn = Math.sin(rot);
+  for (let i = 0; i < n; i++) {
+    const y0 = 1 - (i + 0.5) / n * 2, r = Math.sqrt(1 - y0 * y0), an = i * 2.39996323, x0 = r * Math.cos(an), z = r * Math.sin(an);
+    SP_REST.push(SOAP_BALLS[bi][0] + (x0 * c - y0 * sn) * f * SOAP_R, SOAP_R + 0.02 + (x0 * sn + y0 * c) * f * SOAP_R, SOAP_BALLS[bi][1] + z * f * SOAP_R); SP_BALL.push(bi);
+  }
+}
+const NSO = SP_BALL.length, NCR = NSO * 2;
+const soapMesh = new THREE.InstancedMesh(new THREE.TorusGeometry(1, 0.3, 5, 7, 2.1), new THREE.MeshPhysicalMaterial({ roughness: 0.85, clearcoat: 0, sheen: 0.3 }), NSO);
+const crumbMesh = new THREE.InstancedMesh(new THREE.OctahedronGeometry(1, 0), new THREE.MeshPhysicalMaterial({ roughness: 0.9, clearcoat: 0, flatShading: true }), NCR);
+for (const m of [soapMesh, crumbMesh]) { m.frustumCulled = false; m.visible = false; m.castShadow = true; scene.add(m); }
+const SO = { q: new Float32Array(NSO * 4), s: new Float32Array(NSO), st: new Uint8Array(NSO),      // st: 0 在球上 / 1 正在掉 / 2 落定
+             p: new Float32Array(NSO * 3), u: new Float32Array(NSO * 3), ax: new Float32Array(NSO * 3), ang: new Float32Array(NSO),
+             hm: new Float32Array(40 * 40), broken: 0, per: new Int32Array(NBALL), tot: new Int32Array(NBALL) };
+const CRB = { p: new Float32Array(NCR * 3), u: new Float32Array(NCR * 3), st: new Uint8Array(NCR), s: new Float32Array(NCR), q: new Float32Array(NCR * 4) };
+{ const q = new THREE.Quaternion(), ax = new THREE.Vector3(), cols = [0xff9dbd, 0xffe9b0, 0xbfa8ff, 0x9fe6cc, 0xffbf8f].map(c => new THREE.Color(c)), white = new THREE.Color(0xffffff), tmpc = new THREE.Color();      // 每颗球一个颜色：粉、奶黄、淡紫、薄荷、蜜桃
+  let seed = 401; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let k = 0; k < NSO; k++) {       // 每根丝的朝向、粗细、颜色都不一样；它迸出的两粒碎渣和它同色
+    q.setFromAxisAngle(ax.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize(), rnd() * 6.283).toArray(SO.q, k * 4);
+    SO.s[k] = 0.052 + rnd() * 0.03; SO.ax[k*3] = rnd() - 0.5; SO.ax[k*3+1] = rnd() - 0.5; SO.ax[k*3+2] = rnd() - 0.5; SO.tot[SP_BALL[k]]++;      // 丝细一点、密一点，球的轮廓才圆
+    const col = tmpc.copy(cols[SP_BALL[k] % cols.length]).lerp(white, rnd() * 0.45).clone(); soapMesh.setColorAt(k, col);      // 同一颗球里深深浅浅
+    for (let j = 0; j < 2; j++) { const i = k * 2 + j; crumbMesh.setColorAt(i, col); CRB.s[i] = 0.014 + rnd() * 0.022;
+      q.setFromAxisAngle(ax.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize(), rnd() * 6.283).toArray(CRB.q, i * 4); }
+  } }
+function soapShape(x, y, z) {         // 罩在这堆球外面的罩子：一个扁扁的圆角大馒头
+  const hl = Math.hypot(x, z) || 1; let cx = x / hl, cz = z / hl;
+  const k = 1 / (Math.pow(Math.pow(Math.abs(cx), 3) + Math.pow(Math.abs(cz), 3), 1 / 3) || 1); cx *= k; cz *= k;
+  const r = Math.pow(Math.max(0, 1 - Math.pow(Math.abs(y), 2.4)), 1 / 2.4);
+  return [cx * r * 1.36, 0.46 * y, cz * r * 1.02];
+}
+const makeSoapTex = () => bakeTex(32, 107, () => [255, 220, 232]);
+function soapReset() { SO.st.fill(0); SO.hm.fill(0); SO.broken = 0; SO.ang.fill(0); SO.per.fill(0); CRB.st.fill(0); if (SO.doom) SO.doom.fill(0); if (SO.dmg) { SO.dmg.fill(0); SO.stage.fill(0); } }
+const _sq = new THREE.Quaternion(), _sq2 = new THREE.Quaternion(), _sv = new THREE.Vector3(), _ss = new THREE.Vector3(), _bmS = new THREE.Matrix4();
+function soapBreak(k, fx, fz, kick) {   // 这根丝崩下来：朝着远离手指的方向蹦出去，再迸出两粒碎渣
+  const o = k * 3;
+  SO.st[k] = 1; SO.broken++; SO.per[SP_BALL[k]]++;
+  SO.p[o] = SP_REST[o]; SO.p[o+1] = SP_REST[o+1]; SO.p[o+2] = SP_REST[o+2];
+  let dx = SP_REST[o] - fx, dz = SP_REST[o+2] - fz; const hl = Math.hypot(dx, dz) || 1; dx /= hl; dz /= hl;
+  const sp = (0.7 + Math.random() * 1.9) * kick;
+  SO.u[o] = dx * sp + (Math.random() - 0.5) * 0.9; SO.u[o+1] = 0.5 + Math.random() * 2.2 * kick; SO.u[o+2] = dz * sp + (Math.random() - 0.5) * 0.9;
+  for (let j = 0; j < 2; j++) { const i = (k * 2 + j) * 3, s2 = (0.9 + Math.random() * 2.4) * kick;
+    CRB.st[k * 2 + j] = 1; CRB.p[i] = SP_REST[o]; CRB.p[i+1] = SP_REST[o+1]; CRB.p[i+2] = SP_REST[o+2];
+    CRB.u[i] = dx * s2 + (Math.random() - 0.5) * 1.6; CRB.u[i+1] = 0.6 + Math.random() * 2.8 * kick; CRB.u[i+2] = dz * s2 + (Math.random() - 0.5) * 1.6; }
+}
+function soapFall(P, U, o, dt, add) {   // 掉下去、落到碎屑堆上。落定返回 true
+  const HM = SO.hm, G = 40, cell = 0.11, org = -G * cell / 2;
+  U[o+1] -= 9 * dt; P[o] += U[o] * dt; P[o+1] += U[o+1] * dt; P[o+2] += U[o+2] * dt;
+  const rr = Math.hypot(P[o], P[o+2]); if (rr > 2.02) { P[o] *= 2.02 / rr; P[o+2] *= 2.02 / rr; U[o] = U[o+2] = 0; }      // 不掉出托盘
+  let cx = Math.min(G - 1, Math.max(0, ((P[o] - org) / cell) | 0)), cz = Math.min(G - 1, Math.max(0, ((P[o+2] - org) / cell) | 0));
+  if (P[o+1] > HM[cx + cz * G] + 0.025 || U[o+1] >= 0) return false;
+  for (const [ex, ez] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const x2 = cx + ex, z2 = cz + ez;        // 往旁边更低的地方滚一格，堆才会摊开
+    if (x2 >= 0 && x2 < G && z2 >= 0 && z2 < G && HM[x2 + z2 * G] < HM[cx + cz * G] - 0.04) { cx = x2; cz = z2; P[o] += ex * cell; P[o+2] += ez * cell; } }
+  P[o+1] = HM[cx + cz * G] + 0.025; HM[cx + cz * G] += add; return true;
+}
+function soapUpdate(dt) {
+  let fresh = 0; SO.held = 0;
+  if (dt > 0) {
+    for (const f of fingers) {          // 指尖碰到的丝都崩下来（平板：压到的那一片）
+      if (f.pinch) continue;            // 捏：不是一碰就碎，要捏住一会儿（见下面）
+      const R = f.plate ? 0 : f.r + 0.07, R2 = R * R;
+      for (let k = 0, o = 0; k < NSO; k++, o += 3) {
+        if (SO.st[k]) continue;
+        const dx = SP_REST[o] - f.c.x, dy = SP_REST[o+1] - f.c.y, dz = SP_REST[o+2] - f.c.z;
+        if (f.plate ? (dx * f.ax + dy * f.ay + dz * f.az < 0.06 && dx*dx + dy*dy + dz*dz < f.r * f.r) : dx*dx + dy*dy + dz*dz < R2) { soapBreak(k, f.c.x, f.c.z, 1); fresh++; }
+      }
+    }
+    const doom = SO.doom ||= new Uint8Array(NBALL), dmg = SO.dmg ||= new Float32Array(NBALL), stage = SO.stage ||= new Uint8Array(NBALL); let held = 0;
+    for (const f of fingers) {
+      if (f.plate && f.depth > f.maxDepth * 0.3) doom.fill(2);                       // 压：手掌压下去，整盘的球全碎
+      else if (f.pinch && f.depth > f.maxDepth * 0.4) {                             // 捏：捏住的那一整颗球碎掉
+        let best = -1, bd = 1e9; const a = f.touch.anchor;
+        for (let bi = 0; bi < NBALL; bi++) { const d = Math.hypot(a.x - SOAP_BALLS[bi][0], a.z - SOAP_BALLS[bi][1]); if (d < bd) { bd = d; best = bi; } }
+        if (bd < SOAP_R + 0.35 && !doom[best]) held |= 1 << best;
+      }
+    }
+    // 捏：和汽水袋里的蜡皮一样——要一直捏着，先裂一下、再裂一下（每次崩掉几根丝），捏够了整颗才碎。松手不会恢复，下次接着捏
+    SO.held = held;
+    for (let bi = 0; bi < NBALL; bi++) if (held >> bi & 1) {
+      dmg[bi] += dt; const st = Math.min(3, (dmg[bi] / 0.6) | 0);
+      if (st > stage[bi]) {
+        stage[bi] = st;
+        if (st >= 3) doom[bi] = 2;
+        else { sfx.crack(3 + st * 2, false); let left = 10; for (let k = 0; k < NSO && left; k++) if (!SO.st[k] && SP_BALL[k] === bi && Math.random() < 0.08) { soapBreak(k, SOAP_BALLS[bi][0], SOAP_BALLS[bi][1], 0.45); left--; fresh++; } }
+      }
+    }
+    for (let bi = 0; bi < NBALL; bi++) {
+      if (!doom[bi] && SO.per[bi] > SO.tot[bi] * 0.5) doom[bi] = 1;                 // 戳：一颗球被戳掉一半，剩下的也撑不住
+      if (!doom[bi] || SO.per[bi] >= SO.tot[bi]) continue;
+      let left = doom[bi] === 2 ? 90 : 34; const kick = doom[bi] === 2 ? 1.15 : 0.6;      // 整颗捏碎 / 压碎的时候炸得更开
+      for (let k = 0; k < NSO && left; k++) if (!SO.st[k] && SP_BALL[k] === bi) { soapBreak(k, SOAP_BALLS[bi][0], SOAP_BALLS[bi][1], kick); left--; fresh++; }
+    }
+  }
+  for (let k = 0, o = 0; k < NSO; k++, o += 3) {
+    let sc = SO.s[k];
+    if (SO.st[k] === 0) {
+      _sv.set(SP_REST[o], SP_REST[o+1], SP_REST[o+2]); _sq.fromArray(SO.q, k * 4);
+      const bi = SP_BALL[k];
+      if (SO.held >> bi & 1) {          // 正被捏着的那颗：压扁一点、跟着发抖，裂得越多抖得越厉害（和汽水袋里的小道具一样）
+        const g = 1 + SO.stage[bi], a = 0.03 * g * Math.sin(performance.now() * 0.07), c = Math.cos(a), sn = Math.sin(a), w = 1 + 0.05 * g;
+        const dx = (_sv.x - SOAP_BALLS[bi][0]) * w, dz = (_sv.z - SOAP_BALLS[bi][1]) * w;
+        _sv.set(SOAP_BALLS[bi][0] + dx * c + dz * sn, _sv.y * (1 - 0.07 * g), SOAP_BALLS[bi][1] - dx * sn + dz * c);
+      }
+    }
+    else {
+      if (SO.st[k] === 1) { SO.ang[k] += 8 * dt; if (soapFall(SO.p, SO.u, o, dt, 0.03)) SO.st[k] = 2; }
+      sc *= 0.8; _sv.set(SO.p[o], SO.p[o+1], SO.p[o+2]);
+      _sq.fromArray(SO.q, k * 4).premultiply(_sq2.setFromAxisAngle(_ss.set(SO.ax[o], SO.ax[o+1], SO.ax[o+2]).normalize(), SO.ang[k]));
+    }
+    _bmS.compose(_sv, _sq, _ss.set(sc, sc, sc * 0.6)); soapMesh.setMatrixAt(k, _bmS);
+  }
+  for (let i = 0, o = 0; i < NCR; i++, o += 3) {
+    const sc = CRB.st[i] ? CRB.s[i] : 0;
+    if (CRB.st[i] === 1 && soapFall(CRB.p, CRB.u, o, dt, 0.008)) CRB.st[i] = 2;
+    _bmS.compose(_sv.set(CRB.p[o], CRB.p[o+1], CRB.p[o+2]), _sq.fromArray(CRB.q, i * 4), _ss.set(sc, sc * 0.7, sc)); crumbMesh.setMatrixAt(i, _bmS);
+  }
+  soapMesh.instanceMatrix.needsUpdate = true; crumbMesh.instanceMatrix.needsUpdate = true;
+  if (fresh) sfx.crack(Math.min(7, 1 + (fresh >> 2)), fresh > 12);
+}
+/* ───────────────────────── 多层脆皮捏捏 ─────────────────────────
+   一摞圆形的黏土片叠在一起，每一片外面都裹着蜡皮。和别的脆皮捏捏是同一套：黏土是软的、能捏，蜡壳会裂会碎。
+   每一片都不是规规矩矩的正圆：边缘弯弯扭扭、厚薄不匀、摞得也不太齐，片和片之间有一道深深的缝。 */
+const STK = { n: 6, H: 0.17, R: 0.76 };
+function stackLayer(k, az) {            // 第 k 片在 az 方向上：半径、往哪边歪、这一圈的高低起伏
+  return [STK.R * (1 + 0.075 * Math.sin(2 * az + k * 1.7) + 0.045 * Math.sin(3 * az + k * 2.9 + 1) + 0.02 * Math.sin(5 * az + k)),
+          0.07 * Math.sin(k * 2.3 + 0.4), 0.07 * Math.cos(k * 1.9 + 1), 0.028 * Math.sin(2 * az + k * 1.1) + 0.014 * Math.sin(3 * az + k * 2)];
+}
+function stackShape(x, y, z) {
+  const { n, H } = STK, az = Math.atan2(x, z), hl = Math.hypot(x, z) || 1, cx = x / hl, cz = z / hl, E = 0.84;
+  if (y > E || y < -E) {                // 最上面一片的顶面 / 最下面一片的底面
+    const top = y > 0, k = top ? n - 1 : 0, L = stackLayer(k, az), q = Math.sqrt((1 - Math.abs(y)) / (1 - E)), rad = L[0] * 0.6 * q;
+    return [cx * rad + L[1], (top ? n * H + 0.012 * (1 - q * q) : -0.012 * (1 - q * q)) + L[3] * q, cz * rad + L[2], k, top ? 1 : -1];
+  }
+  const u = (y + E) / (2 * E) * n, k = Math.min(n - 1, Math.floor(u)), t = (u - k) * 2 - 1, L = stackLayer(k, az);
+  const rad = L[0] * (0.6 + 0.4 * Math.sqrt(Math.max(0, 1 - t * t)));          // 每片是一块边缘圆鼓鼓的饼，片和片之间深深地收进去：只有中间一小块挨着
+  return [cx * rad + L[1], (k + 0.5 + t * 0.5) * H + L[3], cz * rad + L[2], k, t];
+}
+function stackSeeds() {                // 蜡片按“片”来分：每块蜡片只属于一片黏土，绝不跨到上下两片上；每片一圈 16 块，四块一组算一大块
+  const S = [], P = [], n = STK.n, E = 0.84; let seed = 77; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let k = 0; k < n; k++) {
+    const yc = -E + (k + 0.5) * 2 * E / n, h = Math.sqrt(1 - yc * yc);
+    for (let j = 0; j < 16; j++) { const az = (j + 0.5 * (k % 2) + (rnd() - 0.5) * 0.4) / 16 * 6.2832; S.push([h * Math.sin(az), yc, h * Math.cos(az)]); P.push(k * 4 + (j >> 2)); }
+  }
+  for (const sg of [1, -1]) {           // 最上面的顶面、最下面的底面：中间一块 + 一圈七块
+    const pl = 24 + (sg > 0 ? 0 : 1); S.push([0, sg, 0]); P.push(pl);
+    for (let j = 0; j < 7; j++) { const az = (j + rnd() * 0.3) / 7 * 6.2832, y = 0.955 * sg, h = Math.sqrt(1 - y * y); S.push([h * Math.sin(az), y, h * Math.cos(az)]); P.push(pl); }
+  }
+  return { S, P };
+}
+function makeStackTex() {
+  const cols = [[255, 205, 220], [255, 224, 190], [255, 243, 184], [206, 240, 196], [196, 232, 250], [214, 206, 255]];
+  return bakeTex(768, 113, (dx, dy, dz) => { const q = stackShape(dx, dy, dz), c = cols[q[3] % cols.length], k = 1 - 0.22 * Math.pow(Math.abs(q[4]), 6); return [c[0] * k, c[1] * k, c[2] * k]; });      // 缝里暗一点
+}
+/* ───────────────────────── 水果捏捏：西瓜 / 草莓 / 苹果片 / 橙子柠檬片 ─────────────────────────
+   都是脆皮捏捏那一套：黏土捏成水果的样子，外面裹一层半透明的蜡壳。 */
+// 西瓜：一角切好的西瓜立在托盘上，正面朝外。轮廓是一个扇形（尖朝上、瓜皮那道弧在下面），角都是圆的
+const MELON = { a: 0.8, R: 1.5, phi: 0.62, T: 0.27, e: 0.12, seeds: [] };
+for (const [d, as] of [[0.52, [-0.2, 0.2]], [0.82, [-0.36, 0, 0.36]], [1.1, [-0.44, -0.15, 0.15, 0.44]]])
+  for (const th of as) MELON.seeds.push([d * Math.sin(th), MELON.a - d * Math.cos(th), Math.sin(th), -Math.cos(th)]);
+function melonShape(x, y, z) {
+  const { a, R, phi, T, e } = MELON, w = 1 - Math.abs(z), hl = Math.hypot(x, y) || 1, cx = x / hl, cy = y / hl;
+  const nd = Math.abs(cx) * Math.cos(phi) + cy * Math.sin(phi), da = cy * a;
+  const arc = da + Math.sqrt(da * da + R * R - a * a), side = nd > 1e-4 ? a * Math.sin(phi) / nd : 1e9;
+  const rho = Math.pow(Math.pow(arc, -10) + Math.pow(side, -10), -0.1);
+  let r, Z;
+  if (w < 0.5) { r = (rho - e) * Math.sqrt(w / 0.5); Z = T; }
+  else if (w < 0.62) { const th = (w - 0.5) / 0.12 * Math.PI / 2; r = rho - e + e * Math.sin(th); Z = T - e + e * Math.cos(th); }
+  else { r = rho; Z = (T - e) * (1 - w) / 0.38; }
+  const px = cx * r, py = cy * r, t = py + 0.55;                         // 底下那道弧压平一点，站得住
+  return [px, -0.55 + 0.625 * t + 0.375 * Math.sqrt(t * t + 0.01), z < 0 ? -Z : Z, px, py, w < 0.56 ? 1 : 0];
+}
+function makeMelonTex() {
+  return bakeTex(768, 127, (dx, dy, dz) => {
+    const q = melonShape(dx, dy, dz), d = Math.hypot(q[3], q[4] - MELON.a), R = MELON.R;
+    if (d > R - 0.13) return Math.sin(q[3] * 15 + 1.6 * Math.sin(q[2] * 11)) > 0.25 ? [30, 104, 50] : [86, 172, 72];       // 瓜皮：深浅相间的条纹
+    if (d > R - 0.23) return [226, 242, 196];                                                                         // 皮和瓤之间一道发白的边
+    if (q[5]) for (const s of MELON.seeds) {                                                                           // 两个切面上的瓜子
+      const ex = q[3] - s[0], ey = q[4] - s[1], al = ex * s[2] + ey * s[3], ac = ex * s[3] - ey * s[2];
+      if (al * al / 0.0036 + ac * ac / 0.0011 < 1) return [44, 26, 24];
+    }
+    const k = sm01((d - (R - 0.42)) / 0.19); return [240 + 12 * k, 58 + 90 * k, 70 + 70 * k];                            // 瓜瓤，靠近皮的地方淡一点
+  });
+}
+// 草莓：萼片在上、尖朝下，身上一圈圈螺旋排开的籽，每颗籽都陷下去一个小窝
+const BERRY = [];
+for (let i = 0; i < 90; i++) { const y = 1 - (i + 0.5) / 90 * 2, r = Math.sqrt(1 - y * y), a = i * 2.39996323; BERRY.push(r * Math.cos(a), y, r * Math.sin(a)); }
+function berryShape(x, y, z) {
+  const az = Math.atan2(x, z), th = Math.acos(Math.max(-1, Math.min(1, y))), K = 0.8;
+  const leaf = sm01((0.3 + 0.48 * Math.pow(0.5 + 0.5 * Math.cos(5 * az), 1.3) - th) / 0.07);      // 五片萼片
+  let best = -1;
+  if (leaf < 1) for (let i = 0; i < BERRY.length; i += 3) { const d = x * BERRY[i] + y * BERRY[i+1] + z * BERRY[i+2]; if (d > best) best = d; }
+  const sd = Math.acos(Math.min(1, best)), dim = (1 - leaf) * Math.exp(-sd * sd / 0.0032);
+  const R = 0.98 * (0.6 + 0.4 * sm01((y + 1.05) / 1.25)) * (1 - 0.035 * dim) * (1 + 0.04 * leaf);
+  let Y = y * (1.15 - 0.2 * y) + 0.035 * leaf + 0.2 * sm01((0.15 - th) / 0.13);                   // 顶上一小截果柄
+  const t = Y + 1.22; Y = -1.22 + 0.625 * t + 0.375 * Math.sqrt(t * t + 0.012);
+  return [x * R * K, Y * K, z * R * K, leaf, sd, th, az];
+}
+function makeBerryTex() {
+  return bakeTex(768, 131, (dx, dy, dz) => {
+    const q = berryShape(dx, dy, dz);
+    if (q[3] > 0.5) { const k = q[5] < 0.15 ? 0.2 : 0.5 + 0.5 * Math.cos(5 * q[6]); return [58 + 44 * k, 138 + 40 * k, 50 + 16 * k]; }
+    if (q[4] < 0.034) return [252, 224, 120];
+    const k = sm01((0.085 - q[4]) / 0.05), p = sm01((0.95 - q[5]) / 0.5);                          // 籽周围深一圈；靠近萼片的肩膀上颜色浅一点
+    return [(228 + 16 * p) * (1 - 0.2 * k), (34 + 60 * p) * (1 - 0.3 * k), (46 + 40 * p) * (1 - 0.3 * k)];
+  });
+}
+// 苹果片 / 橙子柠檬片：和多层脆皮一样是六片叠在一起，只是每一片是一片切开的水果——边上一圈是果皮，切面是果肉。
+// 外形函数多返回两个数给贴图用：这一点离这片的中心有多远（1 = 最外沿）、在哪个方向上。
+function sliceStack(o) {
+  const n = STK.n, E = 0.84, H = o.H;
+  const layer = (k, az) => [o.R[k % 2] * (1 + o.wob * (0.075 * Math.sin(2 * az + k * 1.7) + 0.045 * Math.sin(3 * az + k * 2.9 + 1)) + o.lobe * Math.cos(5 * az + k * 1.3)),
+    o.off * Math.sin(k * 2.3 + 0.4), o.off * Math.cos(k * 1.9 + 1), o.wob * (0.028 * Math.sin(2 * az + k * 1.1) + 0.014 * Math.sin(3 * az + k * 2))];
+  return (x, y, z) => {
+    const az = Math.atan2(x, z), hl = Math.hypot(x, z) || 1, cx = x / hl, cz = z / hl;
+    if (y > E || y < -E) {
+      const top = y > 0, k = top ? n - 1 : 0, L = layer(k, az), q = Math.sqrt((1 - Math.abs(y)) / (1 - E)), rad = L[0] * 0.6 * q;
+      return [cx * rad + L[1], (top ? n * H + 0.012 * (1 - q * q) : -0.012 * (1 - q * q)) + L[3] * q, cz * rad + L[2], k, top ? 1 : -1, 0.6 * q, az];
+    }
+    const u = (y + E) / (2 * E) * n, k = Math.min(n - 1, Math.floor(u)), t = (u - k) * 2 - 1, L = layer(k, az), b = 0.6 + 0.4 * Math.sqrt(Math.max(0, 1 - t * t));
+    return [cx * L[0] * b + L[1], (k + 0.5 + t * 0.5) * H + L[3], cz * L[0] * b + L[2], k, t, b, az];
+  };
+}
+const appleShape = sliceStack({ H: 0.18, R: [0.8, 0.77], wob: 0.5, lobe: 0.012, off: 0.06 });
+function makeAppleTex() {            // 一片绿苹果、一片红苹果；最上面那片的切面上看得到五角星形的果核和籽
+  return bakeTex(768, 137, (dx, dy, dz) => {
+    const q = appleShape(dx, dy, dz), rho = q[5], az = q[6], sh = 1 - 0.2 * Math.pow(Math.abs(q[4]), 6);
+    if (rho > 0.93) { const c = q[3] % 2 ? [208, 34, 44] : [146, 198, 58], s = 0.93 + 0.07 * Math.sin(az * 37 + q[3]); return [c[0] * s, c[1] * s, c[2] * s]; }
+    for (let j = 0; j < 5; j++) {
+      const a = j * 1.2566, ux = Math.sin(a), uz = Math.cos(a), ex = rho * Math.sin(az) - 0.15 * ux, ez = rho * Math.cos(az) - 0.15 * uz, al = ex * ux + ez * uz, ac = ex * uz - ez * ux;
+      if (al * al / 0.0042 + ac * ac / 0.0011 < 1) return [96, 54, 28];
+    }
+    const core = 0.3 * (0.42 + 0.58 * Math.pow(0.5 + 0.5 * Math.cos(5 * az), 2));
+    if (rho < core) return [244, 228, 170];
+    if (rho < core + 0.018) return [226, 206, 140];
+    return [255 * sh, 245 * sh, 212 * sh];
+  });
+}
+const citrusShape = sliceStack({ H: 0.15, R: [0.74, 0.8], wob: 0.3, lobe: 0, off: 0.07 });
+function makeCitrusTex() {           // 一片柠檬、一片橙子：果皮 → 一圈白瓤 → 一瓣一瓣的果肉
+  return bakeTex(768, 139, (dx, dy, dz) => {
+    const q = citrusShape(dx, dy, dz), rho = q[5], az = q[6], or = q[3] % 2, sh = 1 - 0.2 * Math.pow(Math.abs(q[4]), 6);
+    if (rho > 0.93) return or ? [255, 142, 26] : [255, 218, 52];
+    const a = az * 1.5915 + q[3] * 0.37, fr = Math.abs(a - Math.round(a)) * 0.6283 * rho;
+    if (rho > 0.85 || rho < 0.055 || fr < 0.017) return [255 * sh, 247 * sh, 224 * sh];
+    const v = 0.9 + 0.1 * Math.sin(az * 70 + rho * 26) * Math.sin(rho * 60 + q[3]);
+    return or ? [255 * v * sh, 166 * v * sh, 44 * v * sh] : [255 * v * sh, 232 * v * sh, 104 * v * sh];
+  });
+}
+const bagGeo = new THREE.BufferGeometry();
+bagGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3).setUsage(THREE.DynamicDrawUsage));
+const bagNrm = new Float32Array(N * 3);      // 袋子自己的法线：在里面那层的法线上加一点褶皱，反光才会碎成一道一道的
+bagGeo.setAttribute('normal', new THREE.BufferAttribute(bagNrm, 3).setUsage(THREE.DynamicDrawUsage));
+bagGeo.setIndex(geo.index);
+bagGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.8, 0), 4);
+const bag = new THREE.Mesh(bagGeo, new THREE.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, opacity: 0.16, roughness: 0.14,
+  clearcoat: 1, clearcoatRoughness: 0.08, depthWrite: false }));
+bag.frustumCulled = false; bag.visible = false; bag.renderOrder = 1; scene.add(bag);
+function bagUpdate() {
+  const P = bagGeo.attributes.position.array, T = TOYS[toyName].bag, so = TOYS[toyName].beads ? (TOYS[toyName].bigBeads ? BB.skinOff : skinOff) : null, oz = TOYS[toyName].ooze || 0;
+  for (let i = 0; i < N * 3; i += 3) {
+    const t = so ? so[i / 3] : oz ? T + oz * press[i / 3] : T * (1 + 0.35 * Math.sin(dirs[i] * 13 + dirs[i+1] * 7) * Math.sin(dirs[i+2] * 11 - dirs[i+1] * 9));      // 膜不是绷紧的，有点褶
+    P[i] = pos[i] + nrm[i] * t; P[i+1] = Math.max(0.004, pos[i+1] + nrm[i+1] * t); P[i+2] = pos[i+2] + nrm[i+2] * t; }
+  if (so) { if (TOYS[toyName].bigBeads) skinClear(P, BB.r, BB.skinNear, BB.C); else skinClear(P); }
+  const cr = TOYS[toyName].crinkle || 0;
+  for (let i = 0; i < N * 3; i += 3) {
+    const a = dirs[i] * 9 + dirs[i+2] * 5, b = dirs[i+2] * 11 - dirs[i] * 4, c = dirs[i] * 23 + dirs[i+1] * 17 + dirs[i+2] * 19;
+    const nx = nrm[i] + cr * (Math.sin(a) + 0.5 * Math.sin(c)), ny = nrm[i+1] + cr * 0.3 * Math.sin(a + b), nz = nrm[i+2] + cr * (Math.sin(b) + 0.5 * Math.cos(c));
+    const l = 1 / (Math.sqrt(nx*nx + ny*ny + nz*nz) || 1); bagNrm[i] = nx * l; bagNrm[i+1] = ny * l; bagNrm[i+2] = nz * l;
+  }
+  bagGeo.attributes.normal.needsUpdate = true;
+  bagGeo.attributes.position.needsUpdate = true;
+}
+
+// 脆皮冰激凌：一块奶油雪糕插着木棍。这只的“蜡壳”就是巧克力脆皮（不透明），木棍上不裹
+function iceRaw(x, y, z) {
+  const T = 0.34, w = 1 - Math.abs(y), hl = Math.hypot(x, z) || 1, cx = x / hl, cz = z / hl;
+  let rho = 1 / (Math.pow(Math.pow(Math.abs(cx), 4) + Math.pow(Math.abs(cz) / 0.56, 4), 0.25) || 1), e = 0.22;
+  let r, Y;
+  if (w < 0.78) { r = (rho - e) * Math.sqrt(w / 0.78); Y = T; }
+  else if (w < 0.9) { const th = (w - 0.78) / 0.12 * Math.PI / 2; r = rho - e + e * Math.sin(th); Y = T - e + e * Math.cos(th); }
+  else { r = rho; Y = (T - e) * (1 - w) / 0.1; }
+  return [cx * r, y < 0 ? -Y : Y, cz * r];
+}
+const iceShape = iceRaw;
+// 木棍是硬的，不属于黏土：单独一根小木片插在雪糕一头，不会被捏变形
+const iceStick = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.07, 0.22), new THREE.MeshStandardMaterial({ color: 0xe2bd88, roughness: 0.8 }));
+iceStick.position.set(1.35, 0.34, 0); iceStick.castShadow = true; iceStick.visible = false; scene.add(iceStick);
+function makeIceTex() {
+  return bakeTex(768, 53, () => [255, 246, 226]);
+}
+
+/* ───────────────────────── 咸鸭蛋捏捏：蜡壳 + 黏土 + 里面一包会流的蛋黄浆 ───────────────────────── */
+function eggShape(x, y, z) {         // 侧躺的蛋：一头大一头小
+  const k = 1 - 0.17 * x;
+  x *= 1.3; y *= 0.95 * k; z *= 0.95 * k;
+  const t = y + 0.5;
+  y = -0.5 + 0.625 * t + 0.375 * Math.sqrt(t * t + 0.015);
+  return [x, y, z];
+}
+// 芒果爆浆捏捏：一头大一头小、微微弯的芒果
+function mangoShape(x, y, z) {
+  const k = 1 - 0.14 * x;
+  const X = 1.28 * x, Z = 0.8 * k * z; let Y = 0.9 * k * y - 0.1 * x * x + 0.04;
+  const t = Y + 0.52;
+  Y = -0.52 + 0.625 * t + 0.375 * Math.sqrt(t * t + 0.015);
+  return [X, Y, Z];
+}
+function mangoGrad(x, y, z) {         // 芒果皮：果蒂那头是青绿的，往另一头过渡成金黄、橙黄，朝上的一侧晒出一片红晕
+  const lin = c => c.map(v => Math.pow(v, 2.2)), mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  const t = Math.min(1, Math.max(0, (x + 1.3) / 2.6)), n = 0.04 * Math.sin(x * 9 + z * 7) * Math.sin(y * 8 + x * 3);
+  const green = [0.45, 0.68, 0.2], lime = [0.76, 0.82, 0.22], gold = [1.0, 0.8, 0.16], orange = [1.0, 0.6, 0.14], red = [0.93, 0.33, 0.22];
+  let c = t < 0.3 ? mix(green, lime, sm01(t / 0.3)) : t < 0.6 ? mix(lime, gold, sm01((t - 0.3) / 0.3)) : mix(gold, orange, sm01((t - 0.6) / 0.4));
+  c = mix(c, red, 0.6 * sm01((t - 0.35) / 0.3) * sm01((y - 0.45) / 0.5) * sm01((z + 0.25) / 0.6));
+  return lin(c.map(v => Math.min(1, Math.max(0, v + n))));
+}
+const makeMangoTex = () => bakeTex(256, 61, (dx, dy, dz) => { const v = 0.5 + 0.5 * Math.sin(dx * 9 + dy * 7) * Math.sin(dz * 8 + dy * 5); return [255, 208 - 14 * v, 58 - 16 * v]; });   // 芒果肉的黄
+// 巧克力脆球捏捏：一颗球，表面是一粒粒碎榛子顶出来的疙瘩
+function chocoShape(x, y, z) {
+  const n = Math.sin(x * 7 + 1.3) * Math.sin(y * 7 + 0.4) * Math.sin(z * 7 + 2.1) + 0.5 * Math.sin(x * 13) * Math.sin(y * 11 + 1) * Math.sin(z * 12 + 2);
+  const R = 0.92 * (1 + 0.075 * sm01(n * 1.7 + 0.25));
+  let Y = y * R; const t = Y + 0.74;
+  Y = -0.74 + 0.625 * t + 0.375 * Math.sqrt(t * t + 0.015);
+  return [x * R, Y, z * R];
+}
+const makeChocoTex = () => bakeTex(256, 67, (dx, dy, dz) => { const v = 0.5 + 0.5 * Math.sin(dx * 8 + dz * 6) * Math.sin(dy * 9 + dx * 4); return [128 - 16 * v, 82 - 12 * v, 50 - 8 * v]; });     // 棕色的泥
+function makeEggTex() {              // 蛋白色的黏土
+  const S = 512, cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d');
+  g.fillStyle = '#fff3dc'; g.fillRect(0, 0, S, S);
+  let seed = 8; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let k = 0; k < 4000; k++) {
+    g.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,.08)' : 'rgba(190,150,90,.05)';
+    g.beginPath(); g.arc(rnd() * S, rnd() * S, 1 + rnd() * 2.5, 0, 7); g.fill();
+  }
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  return tex;
+}
+// 蛋黄浆：黏土被捏到足够深就破一个口，浆从破口流出来；之后越挤流得越快，一共就这么多，挤完就没了
+const YOLK = { total: 520, left: 0, holes: [], burstAt: 0.5, maxHoles: 3, acc: 0, wait: 0, holeR: 0.17, inset: 0.2, drain: 0.38, absorbed: 0, sip: 0 };
+// 蛋里面的那包浆：一个比黏土表面小一圈的橙色内胆，平时被黏土挡着，破了口才看得见；液面随着流走的量往下降
+const yolkPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 9);
+const yolkInGeo = new THREE.BufferGeometry();
+yolkInGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3).setUsage(THREE.DynamicDrawUsage));
+yolkInGeo.setAttribute('normal', geo.attributes.normal);
+yolkInGeo.setIndex(geo.index);
+yolkInGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.8, 0), 4);
+const yolkIn = new THREE.Mesh(yolkInGeo, new THREE.MeshPhysicalMaterial({ color: 0xffa51f, roughness: 0.16, clearcoat: 1, clearcoatRoughness: 0.05, side: THREE.DoubleSide, clippingPlanes: [yolkPlane] }));
+yolkIn.frustumCulled = false; yolkIn.visible = false; scene.add(yolkIn);
+// 混合：浆淌过的泥被染黄（借用流体的空间网格找“附近有没有浆”）；之后揉泥，黄色会往周围晕开、和白泥混匀
+const stainSum = new Float32Array(N), stainCnt = new Uint8Array(N); let stainPhase = 0, stainAny = false;
+function stainUpdate(dt, act) {
+  const n = SL.n;
+  if (n) {
+    const ih = 1 / SL.h, G2 = GN * GN, R2 = 0.2 * 0.2, add = 3 * dt * 1.1;
+    for (let k = stainPhase; k < N; k += 3) {                    // 每帧只查三分之一的顶点
+      if (stain[k] >= 1) continue;
+      const x = pos[k*3], y = pos[k*3+1], z = pos[k*3+2];
+      const cx = ((x - gridO) * ih) | 0, cy = (y * ih) | 0, cz = ((z - gridO) * ih) | 0; let hit = false;
+      for (let dz = -1; dz <= 1 && !hit; dz++) { const z2 = cz + dz; if (z2 < 0 || z2 >= GN) continue;
+        for (let dy = -1; dy <= 1 && !hit; dy++) { const y2 = cy + dy; if (y2 < 0 || y2 >= GN) continue;
+          for (let dx = -1; dx <= 1 && !hit; dx++) { const x2 = cx + dx; if (x2 < 0 || x2 >= GN) continue;
+            const cc = x2 + y2 * GN + z2 * G2;
+            for (let e = cellStart[cc + 1], m = cellStart[cc]; m < e; m++) {
+              const j = sorted[m]; if (j >= n) continue;
+              const ex = sp[j*3] - x, ey = sp[j*3+1] - y, ez = sp[j*3+2] - z;
+              if (ex*ex + ey*ey + ez*ez < R2) { hit = true; break; }
+            }
+          } } }
+      if (hit) { stain[k] = Math.min(1, stain[k] + add); stainAny = true; }
+    }
+    stainPhase = (stainPhase + 1) % 3;
+  }
+  const mixed = YOLK.absorbed / YOLK.total;
+  if (mixed > 0) {                                               // 揉进去的浆越多，整块泥越接近同一个颜色；全揉进去就完全混匀
+    stainAny = true;
+    const T = 0.62 * mixed, r = Math.min(1, act * 3 * dt);
+    for (let i = 0; i < N; i++) stain[i] += (T - stain[i]) * r * (stain[i] < T ? 1 : mixed);
+  }
+  if (!stainAny) return;
+  const w = Math.min(0.5, act * 5 * dt);
+  if (w > 0.002) {                                               // 揉得越起劲晕得越快
+    stainSum.fill(0); stainCnt.fill(0);
+    for (let t = 0; t < tris.length; t += 3) {
+      const a = tris[t], b = tris[t+1], c = tris[t+2], sa = stain[a], sb = stain[b], sc = stain[c];
+      stainSum[a] += sb + sc; stainSum[b] += sa + sc; stainSum[c] += sa + sb; stainCnt[a] += 2; stainCnt[b] += 2; stainCnt[c] += 2;
+    }
+    for (let i = 0; i < N; i++) stain[i] += (stainSum[i] / stainCnt[i] - stain[i]) * w;
+  }
+  geo.attributes.stain.needsUpdate = true;
+}
+// 揉泥的时候，外面的浆被慢慢带回泥身上、揉进泥里：贴着泥的那一滴先被吃掉
+function kneadUpdate(dt, act) {       // 不同颜色的泥：哪里被按着揉，哪里的颜色就开始混；继续揉会往四周晕开
+  if (act < 0.01) return;
+  // 先搅出花纹：每根手指把周围一圈的颜色绕着自己拧一点（离得越近拧得越多），拧多了就是一圈圈的大理石纹
+  for (const f of fingers) {
+    let b = 0, bd = 1e9;
+    for (let i = 0; i < N * 3; i += 3) {
+      const dx = pos[i] - f.c.x, dy = pos[i+1] - f.c.y, dz = pos[i+2] - f.c.z, d = dx*dx + dy*dy + dz*dz;
+      if (d < bd) { bd = d; b = i; }
+    }
+    if (bd > (f.plate ? 9 : 0.5)) continue;
+    f.touch.sw ??= Math.random() < 0.5 ? -1 : 1;                 // 每次下手随机一个方向；捏的两根手指方向相反
+    const g = f.touch.sw * (f.pinch ? f.pinch.sg : 1) * 3.2 * act * dt;
+    const px = dirs[b], py = dirs[b+1], pz = dirs[b+2], ax = colDir[b], ay = colDir[b+1], az = colDir[b+2];
+    for (let i = 0; i < N * 3; i += 3) {
+      const d = dirs[i] * px + dirs[i+1] * py + dirs[i+2] * pz;
+      if (d < 0.4) continue;
+      const th = g * Math.exp(-(1 - d) * 10), c = Math.cos(th), sn = Math.sin(th);
+      const x = colDir[i], y = colDir[i+1], z = colDir[i+2], dot = (ax * x + ay * y + az * z) * (1 - c);
+      colDir[i]   = x * c + (ay * z - az * y) * sn + ax * dot;
+      colDir[i+1] = y * c + (az * x - ax * z) * sn + ay * dot;
+      colDir[i+2] = z * c + (ax * y - ay * x) * sn + az * dot;
+    }
+    geo.attributes.colDir.needsUpdate = true;
+  }
+  // 再慢慢混成一色
+  const k = act * 2 * dt, w = Math.min(0.5, act * 5 * dt);
+  stainSum.fill(0); stainCnt.fill(0);
+  for (let t = 0; t < tris.length; t += 3) {
+    const a = tris[t], b = tris[t+1], c = tris[t+2], sa = knead[a], sb = knead[b], sc = knead[c];
+    stainSum[a] += sb + sc; stainSum[b] += sa + sc; stainSum[c] += sa + sb; stainCnt[a] += 2; stainCnt[b] += 2; stainCnt[c] += 2;
+  }
+  for (let i = 0; i < N; i++) knead[i] = Math.min(1, knead[i] + (stainSum[i] / stainCnt[i] - knead[i]) * w + press[i] * k);
+  geo.attributes.knead.needsUpdate = true;
+}
+function yolkAbsorb(dt, act) {
+  const n = SL.n, pull = Math.min(1, act * 4);
+  if (!n || pull < 0.05) return;
+  YOLK.sip += Math.min(40, act * 120) * dt;
+  let best = -1, bd = 1e9; const a = 10 * pull * dt;
+  for (let i = 0; i < n; i++) {
+    const dx = sp[i*3], dy = sp[i*3+1] - restCY, dz = sp[i*3+2], dl = Math.sqrt(dx*dx + dy*dy + dz*dz) || 1e-6;
+    const v = dirGrid[cubeCell(dx / dl, dy / dl, dz / dl, DG)] * 3, vy = pos[v+1] - restCY;
+    const gap = dl - Math.sqrt(pos[v]*pos[v] + vy*vy + pos[v+2]*pos[v+2]);
+    if (gap > 0.2) { const hl = Math.sqrt(dx*dx + dz*dz) || 1; sv[i*3] -= dx / hl * a; sv[i*3+2] -= dz / hl * a; }
+    if (gap < bd) { bd = gap; best = i; }
+  }
+  if (YOLK.sip < 1 || bd > 0.3) return;
+  YOLK.sip--; YOLK.absorbed++;
+  const l = n - 1;                                               // 把最后一滴挪到这个位置上
+  for (let c = 0; c < 3; c++) { sp[best*3+c] = sp[l*3+c]; spPrev[best*3+c] = spPrev[l*3+c]; sv[best*3+c] = sv[l*3+c]; }
+  bondJ.fill(-1, best * MAXB, best * MAXB + MAXB); bondJ.fill(-1, l * MAXB, l * MAXB + MAXB);
+  SL.n = l; SL.tick = 0;                                         // 下一步重建邻居表
+}
+function yolkClear() {               // 换到别的捏捏时：洞、内胆、体积缩放都清掉
+  for (const h of faceU.holes.value) h.set(0, 0, 1, 2);
+  volScale = 1; yolkIn.visible = false;
+  stain.fill(0); stainAny = false; geo.attributes.stain.needsUpdate = true;
+}
+function yolkReset() {
+  dirGridBuild(); fluidProfile('yolk'); yolkClear(); yolkIn.visible = true;
+  const j = TOYS[toyName].juice || { color: 0xffa51f, atten: 0xff8a00, stain: [1.0, 0.36, 0.02] };      // 每只爆浆捏捏的浆颜色不一样
+  if (j.fluid) fluidProfile(j.fluid);      // 有的浆不是稀的（芒果里是奶油）
+  slimeMat.color.set(j.color); slimeMat.attenuationColor.set(j.atten); yolkIn.material.color.set(j.color); faceU.stainCol.value.set(...j.stain);
+  YOLK.left = YOLK.total; YOLK.absorbed = 0; YOLK.sip = 0; YOLK.holes.length = 0; YOLK.acc = 0; YOLK.wait = 0; SL.n = 0; sv.fill(0); bondJ.fill(-1); slimeAcc = 0; slimeGeo.setDrawRange(0, 0);
+}
+function yolkUpdate(dt) {
+  YOLK.wait -= dt;
+  if (YOLK.left > 0 && YOLK.holes.length < YOLK.maxHoles && devMax > YOLK.burstAt && YOLK.wait <= 0) {      // 新破口：离已有的破口要有一段距离
+    // 破口不在手指正下方（那里被手指堵着），而是在手指旁边、被挤得最厉害的那一圈上
+    const m = devMaxV * 3; let best = -1, bestDev = 0;
+    for (let i = 0, k = 0; k < N; i += 3, k++) {
+      const ex = pos[i] - pos[m], ey = pos[i+1] - pos[m+1], ez = pos[i+2] - pos[m+2];
+      if (ex*ex + ey*ey + ez*ez > 0.5) continue;
+      let clear = true;
+      for (const f of fingers) {                      // 离每根手指（指尖 + 指身）都要有一点距离
+        if (f.plate) continue;
+        const dx = pos[i] - f.c.x, dy = pos[i+1] - f.c.y, dz = pos[i+2] - f.c.z;
+        const bx = f.pinch ? f.bx : -f.ax, by = f.pinch ? f.by : -f.ay, bz = f.pinch ? f.bz : -f.az, t = Math.max(0, dx * bx + dy * by + dz * bz);
+        if (Math.hypot(dx - t * bx, dy - t * by, dz - t * bz) < f.r + 0.14) { clear = false; break; }
+      }
+      if (!clear) continue;
+      const d = Math.hypot(pos[i] - q0[i], pos[i+1] - restCY - q0[i+1], pos[i+2] - q0[i+2]);
+      if (d > bestDev) { bestDev = d; best = k; }
+    }
+    let far = best >= 0;
+    for (const h of YOLK.holes) if (far && Math.hypot(pos[h*3] - pos[best*3], pos[h*3+1] - pos[best*3+1], pos[h*3+2] - pos[best*3+2]) < 0.6) far = false;
+    if (far) {
+      const hx = dirs[best*3], hy = dirs[best*3+1], hz = dirs[best*3+2];
+      faceU.holes.value[YOLK.holes.length].set(hx, hy, hz, Math.cos(YOLK.holeR));       // 黏土上挖出这个洞
+      for (let k = 0; k < WAX.n; k++) if (hx * waxSeed[k*3] + hy * waxSeed[k*3+1] + hz * waxSeed[k*3+2] > Math.cos(YOLK.holeR + 0.1)) waxSt[k*4] = 1;   // 洞上的蜡片崩掉
+      sfx.crack(5, true);
+      YOLK.holes.push(best); YOLK.acc += 34; YOLK.wait = 2.5;
+    }                  // 两个破口之间至少隔一会儿                                   // 破口的一瞬间先涌出一股
+  }
+  if (YOLK.holes.length && YOLK.left > 0) {
+    YOLK.acc += (14 + Math.min(106, activity * 260)) * dt;                                // 不动时慢慢渗，挤的时候往外涌
+    for (let made = 0; made < 2 && YOLK.acc >= 1 && YOLK.left > 0 && SL.n < SL.MAX; made++) {   // 每帧最多涌出两滴：一下子挤在同一个点上会互相弹飞
+      YOLK.acc--; YOLK.left--;
+      const h = YOLK.holes[(Math.random() * YOLK.holes.length) | 0] * 3, o = SL.n * 3, r = () => Math.random() - 0.5;
+      sp[o] = pos[h] - nrm[h] * 0.03 + r() * 0.09; sp[o+1] = pos[h+1] - nrm[h+1] * 0.03 + r() * 0.09; sp[o+2] = pos[h+2] - nrm[h+2] * 0.03 + r() * 0.09;   // 从洞口里面往外冒
+      sv[o] = nrm[h] * 0.45 + r() * 0.25; sv[o+1] = nrm[h+1] * 0.45 + r() * 0.25; sv[o+2] = nrm[h+2] * 0.45 + r() * 0.25;     // 是涌出来、淌下去，不是喷射
+      spPrev[o] = sp[o]; spPrev[o+1] = sp[o+1]; spPrev[o+2] = sp[o+2];
+      SL.n++;
+    }
+  }
+  // 里面的浆：内胆贴着黏土内壁；流走得越多，液面越低、蛋的体积也跟着瘪下去
+  const gone = 1 - YOLK.left / YOLK.total, IP = yolkInGeo.attributes.position.array; let top = 0;
+  for (let i = 0; i < N * 3; i += 3) {
+    IP[i] = pos[i] - nrm[i] * YOLK.inset; IP[i+1] = pos[i+1] - nrm[i+1] * YOLK.inset; IP[i+2] = pos[i+2] - nrm[i+2] * YOLK.inset;
+    if (IP[i+1] > top) top = IP[i+1];
+  }
+  yolkInGeo.attributes.position.needsUpdate = true;
+  yolkPlane.constant = 0.12 + (top + 0.05 - 0.12) * (1 - gone);
+  volScale = 1 - YOLK.drain * (gone - YOLK.absorbed / YOLK.total);      // 浆被揉回泥里，泥就又鼓回来
+  const soft = activity;                  // slimeStep 会改写 activity（它是给史莱姆的声音用的），这里保住软体自己的值
+  slimeAcc += dt; let k = 0;
+  while (SL.n && slimeAcc >= SL.dt && k < 3) { slimeStep(); slimeAcc -= SL.dt; k++; }
+  if (k === 3 || !SL.n) slimeAcc = 0;
+  activity = soft;
+  yolkAbsorb(dt, soft);
+  stainUpdate(dt, soft);
+  slimeSurface();
+}
+
+const BASE_LOOK = { transmission: 0, thickness: 0, ior: 1.5, sheen: 0.7, attenuationDistance: Infinity };
+function applyFeel() {            // 有自带手感的捏捏（史莱姆）用自己的，其余用手感栏选中的
+  const toy = TOYS[toyName];
+  feel = toy.feel || FEELS[feelName];
+  if (toy.size) feel = { ...feel, spread: feel.spread * toy.size, yield: (feel.yield || 0) * toy.size, cap: (feel.cap || 0.6) * toy.size };      // 小一号的捏捏：带长度的手感参数跟着缩
+  Object.assign(skin, BASE_LOOK, LOOKS[feelName], toy.look);
+  skin.transparent = !!toy.glass; skin.opacity = toy.glass || 1;
+  skin.side = toy.yolk || toy.fizz ? THREE.DoubleSide : THREE.FrontSide;
+  skin.envMapIntensity = toy.shine || 1;
+  skin.clippingPlanes = toy.fizz ? [fizzPlane] : null;        // 碳酸袋子：水只画到液面
+  skin.polygonOffset = !!toy.fizz; skin.polygonOffsetFactor = -6; skin.polygonOffsetUnits = -6;      // 袋底和托盘几乎贴在同一个平面上，不错开一点就会互相抢着画，看起来像一片乱动的波纹      // 咸鸭蛋破了以后要能从洞里看到黏土的内壁
+  skin.needsUpdate = true;
+  faceU.pressTint.value.set(...(toy.tint || [0.93, 0.66, 0.68]));
+  document.getElementById('feel').style.display = toy.fluid || toy.feel ? 'none' : '';
+}
+const CLAY_FEEL = { kShape: 320, damp: 60, vol: 0.2, spread: 0.2, plastic: 12, yield: 0.035, gravity: 2, fixed: true };     // 黏土：不回弹
+// 咸鸭蛋：一层黏土包着一包液体。体积严格守恒（按这里，别处就鼓起来），比实心黏土软、会晃一下，形变只留住一部分
+const EGG_FEEL = { kShape: 300, damp: 40, vol: 1.0, spread: 0.24, plastic: 9, yield: 0.05, gravity: 2, fixed: true };
+const CLAY_LOOK = { roughness: 0.88, clearcoat: 0, sheen: 0.25 };
+const TOYS = {
+  slime: { fluid: true },          // 史莱姆不是软体，而是一团流体粒子（见下面的 slime* 函数）
+  cake: { shape: cakeShape, face: makeCakeFace },
+  cat:  { shape: bearShape, face: makeCatFace },
+  crisp: { shape: crispShape, face: makeClayTex, wax: true, tint: [0.84, 0.8, 0.82], feel: CLAY_FEEL, look: CLAY_LOOK },
+  burger: { shape: burgerShape, face: makeBurgerTex, wax: true, clear: 0.8, tint: [0.84, 0.8, 0.78], feel: CLAY_FEEL, look: CLAY_LOOK },   // clear：蜡壳的透明程度
+  fries:  { shape: friesShape, face: makeFriesTex, wax: true, clear: 0.8, tint: [0.84, 0.8, 0.78], feel: CLAY_FEEL, look: CLAY_LOOK },
+  donut:  { shape: donutShape, face: makeDonutTex, wax: true, clear: 0.8, tint: [0.84, 0.8, 0.78], feel: CLAY_FEEL, look: CLAY_LOOK },
+  carrot: { shape: carrotShape, face: makeCarrotTex, wax: true, clear: 0.8, tint: [0.84, 0.8, 0.78], feel: CLAY_FEEL, look: CLAY_LOOK },
+  hotdog: { shape: hotdogShape, face: makeHotdogTex, wax: true, clear: 0.8, tint: [0.84, 0.8, 0.78], feel: CLAY_FEEL, look: CLAY_LOOK },
+  bread:  { shape: breadShape, face: makeBreadTex, wax: true, clear: 0.8, tint: [0.84, 0.8, 0.78], feel: CLAY_FEEL, look: CLAY_LOOK },
+  ice:    { shape: iceShape, face: makeIceTex, wax: true, shellColor: 0x5c341f, stick: true, tint: [0.9, 0.84, 0.78], feel: CLAY_FEEL, look: CLAY_LOOK },
+  mango: { shape: mangoShape, face: makeMangoTex, wax: true, yolk: true, shellColor: 0xffffff, shellGrad: mangoGrad, shellT: 0.08, crackAt: 0.09, shatterAt: 99, radial: true,      // 厚蜡；只裂成大块，不再碎成小片
+           juice: { fluid: 'cream', color: 0xff9418, atten: 0xff8a00, stain: [1.0, 0.3, 0.02] }, tint: [0.95, 0.85, 0.7], feel: EGG_FEEL, look: CLAY_LOOK },
+  choco: { shape: chocoShape, face: makeChocoTex, wax: true, yolk: true, shellColor: 0x5b3319, juice: { color: 0x2b1206, atten: 0x1e0c04, stain: [0.025, 0.008, 0.003] }, tint: [0.85, 0.8, 0.78], feel: EGG_FEEL, look: CLAY_LOOK },
+  malt:  { shape: maltShape, face: makeMaltTex, pressK: 0.45, bag: 0.05, glass: 0.42, sound: 'gel', tint: [0.9, 0.95, 1.0], feel: MALT_FEEL, look: MALT_LOOK },
+  bead:  { shape: scaled(beadShape, BK), face: makeBeadTex, beads: true, pokeK: 0.6, bag: 0.02, bagLook: [0.42, 0.45, 0.25], sound: 'crisp', tint: [1.0, 0.76, 0.85], feel: BEAD_FEEL, look: { roughness: 0.42, clearcoat: 0.3, clearcoatRoughness: 0.4, sheen: 0 } },
+  pearl: { shape: scaled(beadShape, BK), face: makeBeadTex, beads: true, bigBeads: true, pokeK: 0.6, bag: 0.02, bagLook: [0.15, 0.03, 1, 4], sound: 'crisp', tint: [1.0, 0.76, 0.85], feel: BEAD_FEEL, look: { roughness: 0.42, clearcoat: 0.3, clearcoatRoughness: 0.4, sheen: 0 } },
+  brick: { shape: scaled(beadShape, BK), face: makeBeadTex, beads: true, bricks: true, pokeK: 0.6, bag: 0.02, bagLook: [0.42, 0.45, 0.25], sound: 'crisp', tint: [1.0, 0.76, 0.85], feel: BEAD_FEEL, look: { roughness: 0.42, clearcoat: 0.3, clearcoatRoughness: 0.4, sheen: 0 } },
+  butter: { shape: butterShape, face: makeButterTex, bag: 0.04, glass: 0.66, sound: 'gel', tint: [1.0, 0.92, 0.75], feel: BUTTER_FEEL, look: MALT_LOOK },
+  fizz:  { shape: fizzShape, face: makeFizzTex, fizz: 'lemon', top: true, bag: 0.045, bagLook: [0.32, 0.02, 1, 9], crinkle: 0.34, shine: 4, glass: 0.5, sound: 'fizz', tint: [1, 1, 1], feel: FIZZ_FEEL, look: FIZZ_LOOK },
+  fizzO: { shape: fizzShape, face: makeFizzTexO, fizz: 'orange', top: true, bag: 0.045, bagLook: [0.32, 0.02, 1, 9], crinkle: 0.34, shine: 4, glass: 0.55, sound: 'fizz', tint: [1, 1, 1], feel: FIZZ_FEEL, look: FIZZ_LOOK },
+  fizzC: { shape: fizzShape, face: makeFizzTexC, fizz: 'cola', top: true, bag: 0.045, bagLook: [0.16, 0.02, 1, 9], crinkle: 0.34, shine: 4, glass: 0.82, sound: 'fizz', tint: [1, 1, 1], feel: FIZZ_FEEL, look: FIZZ_LOOK },
+  fizzL: { shape: fizzShape, face: makeFizzTexL, fizz: 'lychee', top: true, bag: 0.045, bagLook: [0.32, 0.02, 1, 9], crinkle: 0.34, shine: 4, glass: 0.2, sound: 'fizz', tint: [1, 1, 1], feel: FIZZ_FEEL, look: FIZZ_LOOK },
+  soap:  { shape: soapShape, face: makeSoapTex, soap: true, pokeK: 0.8, sound: 'crisp', feel: BEAD_FEEL, look: CLAY_LOOK },
+  layer: { shape: stackShape, face: makeStackTex, wax: true, waxSeeds: stackSeeds, clear: 0.5, tint: [0.9, 0.84, 0.86], feel: CLAY_FEEL, look: CLAY_LOOK },
+  melon:  { shape: melonShape, face: makeMelonTex, wax: true, clear: 0.8, tint: [0.84, 0.8, 0.78], feel: CLAY_FEEL, look: CLAY_LOOK },
+  berry:  { shape: berryShape, face: makeBerryTex, wax: true, clear: 0.8, tint: [0.84, 0.8, 0.78], feel: CLAY_FEEL, look: CLAY_LOOK },
+  apple:  { shape: appleShape, face: makeAppleTex, wax: true, waxSeeds: stackSeeds, clear: 0.8, tint: [0.9, 0.84, 0.86], feel: CLAY_FEEL, look: CLAY_LOOK },
+  citrus: { shape: citrusShape, face: makeCitrusTex, wax: true, waxSeeds: stackSeeds, clear: 0.8, tint: [0.9, 0.84, 0.86], feel: CLAY_FEEL, look: CLAY_LOOK },
+  egg:   { shape: eggShape, face: makeEggTex, wax: true, yolk: true, shellColor: 0xe3f1ea, tint: [0.9, 0.84, 0.78], feel: EGG_FEEL, look: CLAY_LOOK },   // 淡青色的鸭蛋壳
+};
+function loadToy(name) {
+  const toy = TOYS[name]; toyName = name;
+  sfx.kit = toy.soap ? 'soap' : toy.beads ? 'beads' : 'wax';
+  for (const f of fingers) scene.remove(f.mesh);
+  fingers.length = 0; touches.clear(); controls.enabled = true;
+  bear.visible = !toy.fluid; slimeMesh.visible = !!toy.fluid || !!toy.yolk;
+  yolkClear();
+  shell.visible = !!toy.wax; shellDepth.visible = false; iceStick.visible = !!toy.stick; bag.visible = !!toy.bag; beadMesh.visible = !!toy.beads && !toy.bricks && !toy.bigBeads; brickMesh.visible = !!toy.bricks; BB.mesh.visible = !!toy.bigBeads; if (toy.beads) bear.visible = false; bubMesh.visible = glitMesh.visible = !!toy.fizz; pawMesh.visible = false; for (const g of FIZZ.models || []) g.visible = false; soapMesh.visible = crumbMesh.visible = !!toy.soap; if (toy.soap) bear.visible = false; for (const m of shardMeshes) m.visible = !!toy.fizz;
+  { const L = toy.bagLook || [0.16, 0.14, 1]; bag.material.color.set(toy.bagColor || 0xffffff); Object.assign(bag.material, { opacity: L[0], roughness: L[1], clearcoat: L[2], envMapIntensity: L[3] || 1, clearcoatRoughness: L[3] ? 0.02 : 0.08 }); }      // 外面那层皮：不透明度 / 粗糙度 / 清漆
+  if (toy.fluid) { fluidProfile('slime'); slimeReset(); applyFeel(); return; }
+  setRest(toy.shape);
+  knead.fill(0); geo.attributes.knead.needsUpdate = true; colDir.set(dirs); geo.attributes.colDir.needsUpdate = true;
+  applyFeel();
+  toy.tex ??= [toy.face(false), toy.face(true)];      // 贴图第一次用到时才生成
+  faceU.faceA.value = toy.tex[0]; faceU.faceB.value = toy.tex[1]; faceU.faceMix.value = 0;
+  if (toy.wax) waxReset();
+  syncMesh();
+  if (toy.beads) beadsUpdate();
+  if (toy.fizz) { fizzReset(); fizzUpdate(0); }
+  if (toy.soap) { soapReset(); soapUpdate(0); }
+  if (toy.bag) bagUpdate();
+  if (toy.yolk) yolkReset();
+}
+// ── 首页：每只捏捏先各渲染一张缩略图，点卡片进去玩，“全部捏捏”回到首页 ──
+// 缩略图一张要算一秒左右（要建一遍蜡壳），捏捏多了以后不能再一口气全算完才显示页面：
+// 页面先出来，缩略图在首页上一张一张补；算好的存在浏览器里，下次打开直接用。
+const THUMB_KEY = 'nie-thumbs-' + (document.querySelector('script[type="module"]')?.textContent.length || 0);     // 代码一改，旧缩略图就作废
+function makeThumbs() {
+  let cache = {};
+  try { cache = JSON.parse(localStorage.getItem(THUMB_KEY) || '{}'); } catch (e) {}
+  const todo = [];
+  for (const el of document.querySelectorAll('.card[data-toy]')) {
+    const u = cache[el.dataset.toy];
+    if (u) el.querySelector('.thumb').style.backgroundImage = `url(${u})`; else todo.push(el);
+  }
+  if (!todo.length) return;
+  const tc = document.createElement('canvas'); tc.width = tc.height = 420; const g = tc.getContext('2d');
+  const step = () => {
+    if (playing) { setTimeout(step, 400); return; }             // 正在玩的时候不抢画面，回到首页再接着补
+    const el = todo.shift();
+    renderer.setSize(640, 640, false); camera.aspect = 1; camera.fov = 30; camera.updateProjectionMatrix();
+    camera.position.set(0, 2.3, 5.4); camera.lookAt(0, 0.62, 0);
+    if (TOYS[el.dataset.toy].top) { camera.position.set(0, 4.2, 4.0); camera.lookAt(0, 0.25, 0); }
+    loadToy(el.dataset.toy);
+    if (TOYS[el.dataset.toy].fluid) { for (let i = 0; i < 60; i++) slimeStep(); slimeSurface(); }
+    renderer.render(scene, camera);
+    g.clearRect(0, 0, 420, 420); g.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, 420, 420);
+    const u = tc.toDataURL(); cache[el.dataset.toy] = u;
+    el.querySelector('.thumb').style.backgroundImage = `url(${u})`;
+    if (todo.length) { setTimeout(step, 20); return; }
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) { const k = localStorage.key(i); if (k.startsWith('nie-thumbs-') && k !== THUMB_KEY) localStorage.removeItem(k); }
+      localStorage.setItem(THUMB_KEY, JSON.stringify(cache));
+    } catch (e) {}
+  };
+  step();
+}
+function homeCam() {
+  const tall = innerWidth < innerHeight * 0.8;
+  camera.position.set(0, tall ? 2.3 : 1.9, tall ? 7.6 : 5.9); controls.target.set(0, tall ? 0.4 : 0.72, 0); controls.update();
+}
+function enterToy(el) {
+  loadToy(el.dataset.toy);
+  document.getElementById('toyTitle').textContent = el.dataset.name;
+  document.body.classList.add('playing'); playing = true;
+  resize(); homeCam();
+  if (TOYS[el.dataset.toy].top) { camera.position.set(0, 4.3, 4.3); controls.target.set(0, 0.25, 0); controls.update(); }      // 扁平的捏捏：从斜上方看
+  if (innerWidth < innerHeight * 0.8 && !TOYS[el.dataset.toy].fluid) {      // 手机竖屏：镜头再拉近，捏捏看起来大 20%；但横着很长的（胡萝卜、热狗）拉近到刚好不出屏幕为止
+    camera.updateMatrixWorld(true); let e = 0.01; const v = new THREE.Vector3();
+    for (let i = 0; i < N * 3; i += 9) e = Math.max(e, Math.abs(v.set(pos[i], pos[i+1], pos[i+2]).project(camera).x));
+    camera.position.sub(controls.target).multiplyScalar(1 / Math.min(1.2, 0.93 / e)).add(controls.target); controls.update();
+  }
+}
+for (const el of document.querySelectorAll('.card[data-toy]')) el.onclick = () => enterToy(el);
+document.getElementById('reset').onclick = () => {        // 重置：当前这只恢复成全新的，视角也回正
+  loadToy(toyName); homeCam();
+};
+document.getElementById('back').onclick = () => {
+  for (const f of fingers) scene.remove(f.mesh);
+  fingers.length = 0; touches.clear(); controls.enabled = true;
+  playing = false; document.body.classList.remove('playing');
+};
+makeThumbs();
+requestAnimationFrame(frame);
+window.__loaded = true;
+
+window.__nie = { SO, NSO, FIZZ, get volScale() { return volScale; }, stain, knead, colDir, camera, controls, press, q, pos, vel, fingers, get activity() { return activity; }, N, substep, volumeAndGrad, get V0() { return V0; }, loadToy, advance, sfx, waxSt, WAX, shell, YOLK, SL, MCG, sp, sv, slimeStep, slimeSurface, slimeMesh, bondJ, get pairN() { return pairN; } };
+</script>
+</body>
+</html>
