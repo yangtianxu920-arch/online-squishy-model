@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { el, click, wake, touch as gameTouch, hidden, diag, window as win, innerWidth as W0, innerHeight as H0 } from './shim.js';
 
-const VERSION = '0.6.0', SHOW_DIAG = false;      // SHOW_DIAG：标题下面那两行诊断小字，排查手机上的问题时再打开
+const VERSION = '0.6.1', SHOW_DIAG = false;      // SHOW_DIAG：标题下面那两行诊断小字，排查手机上的问题时再打开
 export function startUI({ title, sections, canvas2d, loadImage, dpr, menu, safeBottom = 0 }) {
   const { renderer, scene } = win.__r, W = W0, H = H0, s = Math.min(dpr, 2);
   const cv = canvas2d(); cv.width = Math.round(W * s); cv.height = Math.round(H * s);
@@ -132,11 +132,52 @@ export function startUI({ title, sections, canvas2d, loadImage, dpr, menu, safeB
       gameTouch({ type, changedTouches: [t] });
     }
   }
+  // ── 操作提示（和网页版同一套，游戏把“现在该提示什么、在哪里”写在 window.__hint 里）：几张小贴图，每帧只挪位置、改透明度，不用重画整张界面 ──
+  const sprite = (w, h, draw) => {
+    const c = canvas2d(); c.width = w * 2; c.height = h * 2; const x = c.getContext('2d'); x.scale(2, 2); draw(x);
+    const t = new THREE.CanvasTexture(c); t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.generateMipmaps = false; t.minFilter = t.magFilter = THREE.LinearFilter;
+    const ge = new THREE.PlaneGeometry(1, 1); { const uv = ge.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, 1 - uv.getY(i)); }
+    const m = new THREE.Mesh(ge, new THREE.MeshBasicMaterial({ map: t, transparent: true, depthTest: false, depthWrite: false, toneMapped: false }));
+    m.frustumCulled = false; m.renderOrder = 1; m.visible = false; m.userData = { w, h }; uiScene.add(m); return m;
+  };
+  const line = x => { x.strokeStyle = 'rgba(91,70,96,0.5)'; x.lineWidth = 3.5; x.lineCap = x.lineJoin = 'round'; };
+  const TW = 68, TH = 58, TX = W / 2 - (TW * 3 + 12) / 2, TY = H - TH - 12 - Math.max(22, safeBottom);      // 手势栏的位置（和 drawPlay 里一致）
+  const hs = {
+    arc: sprite(200, 90, x => { line(x); x.beginPath(); x.moveTo(30, 26); x.quadraticCurveTo(100, 60, 170, 26); x.moveTo(34.9, 34.7); x.lineTo(30, 26); x.lineTo(39.9, 24.4); x.moveTo(165.1, 34.7); x.lineTo(170, 26); x.lineTo(160.1, 24.4); x.stroke(); }),
+    ring: sprite(80, 80, x => { line(x); x.beginPath(); x.arc(40, 40, 34, 0, 6.2832); x.stroke(); }),
+    hand: sprite(48, 48, x => { x.font = '36px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('👆', 24, 26); }),
+    pinch: sprite(48, 48, x => { x.font = '36px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('🤏', 24, 26); }),
+    down: sprite(48, 48, x => { x.font = '36px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('👇', 24, 26); }),
+    span: sprite(TW * 2 + 20, 20, x => { const w = TW * 2; line(x); x.beginPath(); x.moveTo(10, 10); x.lineTo(10 + w, 10); x.moveTo(16, 4); x.lineTo(10, 10); x.lineTo(16, 16); x.moveTo(4 + w, 4); x.lineTo(10 + w, 10); x.lineTo(4 + w, 16); x.stroke(); }),
+  };
+  const put = (m, cx, cy, k, op) => { m.position.set(cx / W * 2 - 1, 1 - cy / H * 2, 0); m.scale.set(m.userData.w * k / W * 2, m.userData.h * k / H * 2, 1); m.material.opacity = op; m.visible = op > 0.01; };
+  let hk = '', ht = 0;
+  function drawHint() {
+    const h = win.__hint, k = st.mode === 'play' && h ? h.kind : '', now = Date.now();
+    if (k !== hk) { hk = k; ht = now; }
+    for (const n in hs) hs[n].visible = false;
+    if (!k) return;
+    const T = (now - ht) / 1000, a = Math.min(1, T / 0.4);
+    if (k === 'rot') {
+      const cy = TY - 52 - 62, u = 0.5 - 0.5 * Math.cos(Math.PI * T / 1.5), v = 1 - u;
+      put(hs.arc, W / 2, cy, 1, a);
+      put(hs.hand, W / 2 - 100 + v * v * 34 + 2 * v * u * 100 + u * u * 166 + 2, cy - 45 + v * v * 28 + 2 * v * u * 60 + u * u * 28 + 17, 1, 0.85 * a);
+    } else if (k === 'tool') {          // 手势栏上方一根双向箭头，小手指着手势栏在三个手势之间来回走
+      const u = 0.5 - 0.5 * Math.cos(T * 2.1), x0 = TX + 6 + TW / 2;
+      put(hs.span, x0 + TW, TY - 14, 1, a); put(hs.down, x0 + u * TW * 2, TY - 14 - 20, 1, 0.85 * a);
+    } else {
+      const ph = (T % 1.2) / 1.2;
+      put(hs.ring, h.x, h.y, 1.3 - 0.9 * ph, a * Math.min(1, ph / 0.3));
+      if (k === 'holdS') put(hs.pinch, h.x, h.y, 1, 0.85 * a); else put(hs.hand, h.x + 2, h.y + 17, 1, 0.85 * a);      // 肥皂球要用“捏”，小手也是捏的样子
+      if (h.tool) { const i = ['poke', 'pinch', 'palm'].indexOf(h.tool); put(hs.down, TX + 6 + i * TW + TW / 2, TY - 24 - 5 * Math.sin(T * 6), 1, 0.85 * a); }      // 还没选“捏”：一只小手对着“捏”一点一点
+    }
+  }
   function afterFrame() {               // 每一帧：游戏画完（在首页时它不画）之后，把这一层盖上去
     if (st.mode === 'home' && !drag && Math.abs(st.vel) > 0.05) {
       st.scroll = Math.max(0, Math.min(st.max, st.scroll + st.vel)); st.vel *= 0.95; if (st.scroll <= 0 || st.scroll >= st.max) st.vel = 0; st.dirty = true;
     }
     if (st.dirty) redraw();
+    drawHint();
     renderer.autoClear = st.mode === 'home';
     renderer.render(uiScene, uiCam);
     renderer.autoClear = true;

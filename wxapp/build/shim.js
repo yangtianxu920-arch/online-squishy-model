@@ -28,7 +28,7 @@ function adapt(now) {
   const pr = r.getPixelRatio();
   if (avg > 21 && pr > 2) { r.setPixelRatio(Math.max(2, pr - 0.5)); diag.pr = r.getPixelRatio(); fCool = 2; }
 }
-export const requestAnimationFrame = f => G.requestAnimationFrame(() => { const t = performance.now(); f(t); if (afterFrame) afterFrame(); adapt(t); });
+export const requestAnimationFrame = f => G.requestAnimationFrame(() => { const t = performance.now(); adapt(t); f(t); if (afterFrame) afterFrame(); });      // 降清晰度要在画这一帧之前做：改画布大小会把画布清空，画完再改的话这一帧就是一下黑屏
 export const cancelAnimationFrame = id => G.cancelAnimationFrame(id);
 export const matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
 export const navigator = { userAgent: 'wx-miniprogram', vibrate() { try { wx.vibrateShort({ type: 'light' }); } catch (e) {} } };
@@ -180,8 +180,9 @@ export const window = { ...target(winL),
 export const addEventListener = window.addEventListener, removeEventListener = window.removeEventListener;
 // 首页的缩略图是提前渲染好、放在小程序包里的图片：告诉游戏“都已经有了”，它就不会再自己渲染一遍
 export const localStorage = {
-  length: 0, key: () => null, setItem() {}, removeItem() {},
-  getItem: k => k.startsWith('nie-thumbs-') ? JSON.stringify(Object.fromEntries(groups.cards.map(c => [c.dataset.toy, 'x']))) : null,
+  length: 0, key: () => null, removeItem() {},
+  setItem(k, v) { if (k.startsWith('nie-hint')) try { wx.setStorageSync(k, String(v)); } catch (e) {} },      // 操作提示看过几次：记在微信的本地存储里
+  getItem: k => k.startsWith('nie-hint') ? (() => { try { return wx.getStorageSync(k) || null; } catch (e) { return null; } })() : k.startsWith('nie-thumbs-') ? JSON.stringify(Object.fromEntries(groups.cards.map(c => [c.dataset.toy, 'x']))) : null,
 };
 
 // 画在 2D 画布上的贴图：小程序里把像素取出来再交给显卡（直接把画布当贴图，不同手机上不一定行）

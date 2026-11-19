@@ -60,6 +60,25 @@
   body.clean :is(header, #topright, #tools, #bottom, #back) { display:none; }
   #cleanExit { position:fixed; left:0; top:0; width:84px; height:84px; display:none; background:transparent; z-index:20; }
   body.clean.playing #cleanExit { display:block; }
+  /* 操作提示：一只半透明的小手演示动作，不写字；只在头几次出现，做过这个动作以后就不再出现 */
+  #hint { position:fixed; left:50%; top:85%; width:200px; height:90px; margin:-45px 0 0 -100px; transform:scale(1.3); pointer-events:none; opacity:0; transition:opacity .5s; z-index:5; }
+  #hint.on { opacity:1; }
+  #hint svg { position:absolute; inset:0; width:100%; height:100%; }
+  #hint i { position:absolute; left:0; top:0; font-style:normal; font-size:38px; line-height:1; opacity:.82;
+            offset-path:path('M 34 28 Q 100 60 166 28'); offset-rotate:0deg; offset-anchor:50% 8%; animation:hintSwipe 1.5s ease-in-out infinite alternate; }
+  @keyframes hintSwipe { from { offset-distance:0%; } to { offset-distance:100%; } }
+  /* 长按提示：小手按在要捏的地方，一圈圆环往里收 */
+  #hintHold { position:fixed; left:0; top:0; width:0; height:0; pointer-events:none; opacity:0; transition:opacity .5s; z-index:5; }
+  #hintHold.on { opacity:1; }
+  #hintHold b { position:absolute; left:-34px; top:-34px; width:68px; height:68px; border-radius:50%; border:3.5px solid rgba(91,70,96,.5); animation:hintRing 1.2s ease-in infinite; }
+  #hintHold i { position:absolute; left:-19px; top:-4px; font-style:normal; font-size:38px; line-height:1; opacity:.82; }
+  @keyframes hintRing { from { transform:scale(1.5); opacity:0; } 30% { opacity:1; } to { transform:scale(.45); opacity:.9; } }
+  /* 手势栏提示：一只小手指着手势栏，顺着一根双向箭头在三个手势之间来回移动；只指着其中一个不动 = 该选这个 */
+  #hintTool { position:fixed; inset:0; pointer-events:none; opacity:0; transition:opacity .5s; z-index:5; }
+  #hintTool.on { opacity:1; }
+  #hintTool svg { position:absolute; inset:0; width:100%; height:100%; }
+  #hintTool i { position:absolute; left:-19px; top:-19px; font-style:normal; font-size:38px; line-height:1; opacity:.82; }
+  body.clean :is(#hint, #hintHold, #hintTool), body:not(.playing) :is(#hint, #hintHold, #hintTool) { display:none; }
   #err { position:fixed; inset:0; display:none; align-items:center; justify-content:center; padding:30px; text-align:center; font-size:15px; }
   /* 手机版：顶上一行是 返回 / 重置 / 声音，标题在第二行居中；工具栏横着放在底部，手感栏在它上面 */
   @media (max-width:640px) {
@@ -71,6 +90,7 @@
     #tools button { width:74px; height:60px; }
     #bottom { bottom:calc(94px + env(safe-area-inset-bottom)); }
     .seg button { padding:8px 14px; }
+    #hint { top:75%; transform:none; }
     #home { padding:calc(34px + env(safe-area-inset-top)) 14px calc(30px + env(safe-area-inset-bottom)); }
     #home h1 { font-size:30px; margin-bottom:22px; }
     .grid, .grid.big { grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; }
@@ -86,6 +106,10 @@
 <header>
   <h1 id="toyTitle">电子捏捏</h1>
 </header>
+
+<div id="hint"><svg viewBox="0 0 200 90" fill="none" stroke="#5b4660" stroke-opacity=".5" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M30 26Q100 60 170 26"/><path d="M34.9 34.7L30 26L39.9 24.4"/><path d="M165.1 34.7L170 26L160.1 24.4"/></svg><i>👆</i></div>
+<div id="hintHold"><b></b><i>👆</i></div>
+<div id="hintTool"><svg fill="none" stroke="#5b4660" stroke-opacity=".5" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path/></svg><i>👇</i></div>
 
 <div id="topright">
   <button id="reset" class="pillbtn glass" title="把这只捏捏恢复成全新的">↺ 重置</button>
@@ -858,7 +882,7 @@ canvas.addEventListener('pointercancel', onUp);
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 for (const b of document.querySelectorAll('#tools button')) b.onclick = () => {
-  tool = b.dataset.tool;
+  tool = b.dataset.tool; hintDone('tool');
   document.querySelectorAll('#tools button').forEach(x => x.classList.toggle('on', x === b));
 };
 for (const b of document.querySelectorAll('#feel button')) b.onclick = () => {
@@ -970,6 +994,10 @@ const sfx = (() => {
         const t = ctx.currentTime; if (t - lastGrain < 0.03) return; lastGrain = t;
         grain('soap', (snapped ? 0.5 : 0.3) * (0.6 + Math.random() * 0.6), 0.13); cracks++; return;
       }
+      if (kit === 'beads' && bufs.pop) {                // 粉珠 / 蓝珠 / 积木：像捏泡泡纸，很多个“啪”密密地连在一起
+        const t = ctx.currentTime; if (t < lastGrain) return; lastGrain = t + 0.012 + Math.random() * 0.022;      // 很密：一秒三四十下，连成一片
+        grain('pop', (snapped ? 0.4 : 0.26) * (0.6 + Math.random() * 0.7), 0.12, 0, 0, 0.09); cracks++; return;
+      }
       let under = 1;
       if (kit === 'wax' && bufs.crack1 && bufs.crack2 && (snapped || ctx.currentTime - lastGrain > 0.035)) {      // 蜡壳：又脆又酥——一串很短的脆响连着响，一下比一下低、一下比一下轻
         lastGrain = ctx.currentTime;
@@ -1065,7 +1093,7 @@ function frame(now) {
   if (!playing) { last = now; requestAnimationFrame(frame); return; }      // 在首页时不模拟、不渲染
   const dt = Math.min((now - last) / 1000, 1 / 30); last = now;
   if (!window.__manual) advance(dt);        // __manual：自动测试时由脚本自己一步步推进，不受浏览器给后台标签页降速的影响
-  controls.update();
+  controls.update(); hintTick(now);
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
@@ -1974,7 +2002,7 @@ function makeBreadTex() {
 /* ───────────────────────── 麦芽糖捏捏：透明的 PVC 球皮里灌着麦芽糖，捏成一块正方体 ─────────────────────────
    里面那团糖是软体本身（透明、回弹很慢）；球皮是罩在外面一点点的另一层透明膜，跟着一起变形。 */
 function maltShape(x, y, z) {
-  const k = 0.82 / (Math.pow(Math.pow(x, 6) + Math.pow(y, 6) + Math.pow(z, 6), 1 / 6) || 1);      // 圆角正方体
+  const k = 0.738 / (Math.pow(Math.pow(x, 6) + Math.pow(y, 6) + Math.pow(z, 6), 1 / 6) || 1);      // 圆角正方体
   return [x * k, y * k, z * k];
 }
 const makeMaltTex = () => bakeTex(64, 71, () => [150, 208, 255]);      // 几乎无色，带一点点麦芽糖的暖色
@@ -2995,8 +3023,65 @@ function homeCam() {
   const tall = innerWidth < innerHeight * 0.8;
   camera.position.set(0, tall ? 2.3 : 1.9, tall ? 7.6 : 5.9); controls.target.set(0, tall ? 0.4 : 0.72, 0); controls.update();
 }
+/* ───────────────────────── 操作提示 ─────────────────────────
+   不写字，只用小手演示。一次只出现一个，最长 6 秒；做过那个动作就永远不再出现，没做的话最多出现三次。
+   rot = 在空白处拖动可以转视角；tool = 可以换手势；holdF / holdS = 汽水袋里的蜡皮、肥皂球要按住一会儿才碎（肥皂球要用“捏”）。
+   这里只决定“现在该提示什么、在屏幕哪里”，写在 window.__hint 里；网页版由下面的 hintDom 显示，微信版由它自己的界面层去画。 */
+const HINT = window.__hint = { kind: '', x: 0, y: 0, tool: '' };
+let hintQ = [], hintAt = 0, hintGap = 0, hintSig = '';
+const hGet = k => { try { return +localStorage.getItem('nie-hint2-' + k) || 0; } catch (e) { return 9; } };
+const hSet = (k, v) => { try { localStorage.setItem('nie-hint2-' + k, v); } catch (e) {} };
+function hintStart(toy) { hintQ = [toy.fizz ? 'holdF' : toy.soap ? 'holdS' : '', 'rot', 'tool'].filter(k => k && hGet(k) < 3); HINT.kind = ''; hintGap = performance.now() + 700; }
+function hintDone(k) { if (!hintQ.includes(k)) return; hSet(k, 3); hintQ = hintQ.filter(x => x !== k); if (HINT.kind === k) { HINT.kind = ''; hintGap = performance.now() + 900; } }
+function hintStop() { hintQ = []; HINT.kind = ''; hintDom(); }
+const _hv = new THREE.Vector3();
+function hintTick(now) {
+  if (hintQ.includes('holdF') && FIZZ.paw && FIZZ.paw.some(p => p.stage || p.crushed)) hintDone('holdF');
+  if (hintQ.includes('holdS') && ((SO.stage && SO.stage.some(v => v)) || (SO.doom && SO.doom.some(v => v)))) hintDone('holdS');
+  if (HINT.kind && now - hintAt > 6000) { hintQ.shift(); HINT.kind = ''; hintGap = now + 900; }
+  if (!HINT.kind && hintQ.length && now > hintGap && !fingers.length) { const k = hintQ[0]; HINT.kind = k; hintAt = now; hSet(k, hGet(k) + 1); }
+  HINT.tool = '';
+  if (HINT.kind === 'holdF') {          // 指着最靠中间、还没碎的那一块蜡皮（它正上方的袋子皮）
+    let best = null, bd = 1e9; for (const p of FIZZ.paw) { if (p.crushed) continue; const d = pos[p.v] * pos[p.v] + pos[p.v+2] * pos[p.v+2]; if (d < bd) { bd = d; best = p; } }
+    if (best) _hv.set(pos[best.v], pos[best.v+1], pos[best.v+2]);
+  } else if (HINT.kind === 'holdS') {   // 指着前排中间那颗球；还没选“捏”的话，同时让“捏”那个按钮亮起来
+    let bi = 1; if (SO.doom && SO.doom[bi]) bi = SO.doom.findIndex(v => !v);
+    if (bi >= 0) _hv.set(SOAP_BALLS[bi][0], SOAP_R * 1.5, SOAP_BALLS[bi][1]);
+    if (tool !== 'pinch') HINT.tool = 'pinch';
+  }
+  if (HINT.kind === 'holdF' || HINT.kind === 'holdS') { _hv.project(camera); HINT.x = (_hv.x + 1) / 2 * innerWidth; HINT.y = (1 - _hv.y) / 2 * innerHeight; }
+  hintDom();
+}
+const hintEls = { rot: document.getElementById('hint'), hold: document.getElementById('hintHold'), tool: document.getElementById('hintTool'), btns: [...document.querySelectorAll('#tools button')] };
+let hintLine = null;                  // 手势栏旁边那根箭头的两头（屏幕坐标）和小手相对它的偏移
+function hintDom() {
+  const k = HINT.kind, hold = k === 'holdF' || k === 'holdS', E = hintEls;
+  if (hold) E.hold.style.transform = 'translate(' + HINT.x.toFixed(1) + 'px,' + HINT.y.toFixed(1) + 'px)';
+  const sig = k + '|' + HINT.tool;
+  if (sig !== hintSig) {
+    hintSig = sig;
+    E.rot.classList.toggle('on', k === 'rot'); E.hold.classList.toggle('on', hold); E.tool.classList.toggle('on', k === 'tool' || !!HINT.tool);
+    const hi = E.hold.querySelector('i');
+    if (k === 'holdS') { hi.textContent = '🤏'; hi.style.top = '-19px'; } else if (k === 'holdF') { hi.textContent = '👆'; hi.style.top = '-4px'; }      // 肥皂球要用“捏”，小手也换成捏的样子
+    if ((k === 'tool' || HINT.tool) && E.btns[0].getBoundingClientRect) {
+      const r0 = E.btns[0].getBoundingClientRect(), r2 = E.btns[2].getBoundingClientRect(), vert = r2.top - r0.top > r2.left - r0.left;      // 电脑上手势栏是竖的（在左边），手机上是横的（在底部）
+      const c = r => vert ? [r.right + 20, r.top + r.height / 2] : [r.left + r.width / 2, r.top - 20];
+      let A = c(r0), B = c(r2); if (HINT.tool) A = B = c(E.btns.find(x => x.dataset.tool === HINT.tool).getBoundingClientRect());
+      hintLine = { A, B, vert, one: !!HINT.tool };
+      const h = vert ? [[6, -6], [6, 6]] : [[-6, 6], [6, 6]];      // 箭头两头的小尖
+      E.tool.querySelector('path').setAttribute('d', hintLine.one ? '' : 'M' + A + 'L' + B + 'M' + [A[0] + h[0][0], A[1] + h[0][1]] + 'L' + A + 'L' + [A[0] + h[1][0], A[1] + h[1][1]] + 'M' + [B[0] - h[0][0], B[1] - h[0][1]] + 'L' + B + 'L' + [B[0] - h[1][0], B[1] - h[1][1]]);
+      E.tool.querySelector('i').textContent = vert ? '👈' : '👇';
+    }
+  }
+  if ((k === 'tool' || HINT.tool) && hintLine) {      // 小手：在三个手势之间来回走；只提示一个手势时，对着它一点一点
+    const L = hintLine, T = performance.now() / 1000, u = L.one ? 0 : 0.5 - 0.5 * Math.cos(T * 2.1), bob = L.one ? 5 * Math.sin(T * 6) : 0;
+    const x = L.A[0] + (L.B[0] - L.A[0]) * u + (L.vert ? 20 + bob : 0), y = L.A[1] + (L.B[1] - L.A[1]) * u - (L.vert ? 0 : 20 + bob);
+    E.tool.querySelector('i').style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)';
+  }
+}
+controls.addEventListener('start', () => { if (playing) hintDone('rot'); });
 function enterToy(el) {
-  loadToy(el.dataset.toy);
+  loadToy(el.dataset.toy); hintStart(TOYS[el.dataset.toy]);
   document.getElementById('toyTitle').textContent = el.dataset.name;
   document.body.classList.add('playing'); playing = true;
   resize(); homeCam();
@@ -3014,7 +3099,7 @@ document.getElementById('reset').onclick = () => {        // 重置：当前这�
 document.getElementById('back').onclick = () => {
   for (const f of fingers) scene.remove(f.mesh);
   fingers.length = 0; touches.clear(); controls.enabled = true;
-  playing = false; document.body.classList.remove('playing');
+  playing = false; document.body.classList.remove('playing'); hintStop();
 };
 makeThumbs();
 requestAnimationFrame(frame);
